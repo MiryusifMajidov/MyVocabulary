@@ -1,0 +1,834 @@
+import { 
+  collection, 
+  addDoc, 
+  getDocs, 
+  doc, 
+  deleteDoc, 
+  query, 
+  where, 
+  orderBy,
+  updateDoc,
+  increment,
+  serverTimestamp,
+  limit
+} from 'firebase/firestore';
+import { db } from '../lib/firebase';
+import { WordCollection, LearnedCollection, SavedCollection, CollectionStats, User, LeaderboardUser, PublicExam, ExamSettings } from '../types';
+
+export const saveCollection = async (
+  userId: string, 
+  username: string,
+  collectionData: Omit<WordCollection, 'id' | 'userId' | 'username' | 'rating' | 'usageCount'>
+): Promise<WordCollection> => {
+  console.log('Saving collection with userId:', userId);
+  console.log('Collection data:', collectionData);
+  
+  const newCollection = {
+    ...collectionData,
+    userId,
+    username,
+    rating: 0,
+    usageCount: 0,
+    createdAt: collectionData.createdAt
+  };
+  
+  const docRef = await addDoc(collection(db, 'collections'), newCollection);
+  
+  console.log('Collection saved with ID:', docRef.id);
+  
+  return {
+    id: docRef.id,
+    ...newCollection
+  };
+};
+
+// Load user's own collections
+export const loadUserCollections = async (userId: string): Promise<WordCollection[]> => {
+  console.log('Loading user collections for userId:', userId);
+  
+  const q = query(
+    collection(db, 'collections'), 
+    where('userId', '==', userId)
+  );
+  
+  const querySnapshot = await getDocs(q);
+  console.log('Found user collections:', querySnapshot.docs.length);
+  
+  const collections = querySnapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data(),
+    createdAt: doc.data().createdAt.toDate()
+  })) as WordCollection[];
+  
+  collections.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  
+  console.log('Processed user collections:', collections);
+  return collections;
+};
+
+// Load user's saved collections
+export const loadSavedCollections = async (userId: string): Promise<WordCollection[]> => {
+  console.log('Loading saved collections for userId:', userId);
+  
+  // First get saved collection IDs
+  const savedQuery = query(
+    collection(db, 'saved_collections'),
+    where('userId', '==', userId)
+  );
+  
+  const savedSnapshot = await getDocs(savedQuery);
+  const savedCollectionIds = savedSnapshot.docs.map(doc => doc.data().collectionId);
+  
+  if (savedCollectionIds.length === 0) {
+    return [];
+  }
+  
+  // Then get the actual collections
+  const collectionsQuery = query(collection(db, 'collections'));
+  const collectionsSnapshot = await getDocs(collectionsQuery);
+  
+  const savedCollections = collectionsSnapshot.docs
+    .filter(doc => savedCollectionIds.includes(doc.id))
+    .map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+      createdAt: doc.data().createdAt.toDate()
+    })) as WordCollection[];
+  
+  console.log('Found saved collections:', savedCollections.length);
+  return savedCollections;
+};
+
+// Load public collections
+export const loadPublicCollections = async (): Promise<WordCollection[]> => {
+  console.log('Loading public collections');
+  
+  const q = query(
+    collection(db, 'collections'),
+    where('visibility', '==', 'public')
+  );
+  
+  const querySnapshot = await getDocs(q);
+  console.log('Found public collections:', querySnapshot.docs.length);
+  
+  const collections = querySnapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data(),
+    createdAt: doc.data().createdAt.toDate()
+  })) as WordCollection[];
+  
+  // Sort by rating and usage count
+  collections.sort((a, b) => {
+    if (b.rating !== a.rating) return b.rating - a.rating;
+    return b.usageCount - a.usageCount;
+  });
+  
+  return collections;
+};
+
+// Load top rated collections
+export const loadTopRatedCollections = async (limitCount: number = 10): Promise<WordCollection[]> => {
+  console.log('Loading top rated collections');
+  
+  try {
+    // For now, let's load all public collections and sort in JavaScript
+    const q = query(
+      collection(db, 'collections'),
+      where('visibility', '==', 'public')
+    );
+    
+    const querySnapshot = await getDocs(q);
+    
+    const collections = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+      createdAt: doc.data().createdAt.toDate()
+    })) as WordCollection[];
+    
+    // Sort by rating and usage count in JavaScript
+    collections.sort((a, b) => {
+      if (b.rating !== a.rating) return b.rating - a.rating;
+      return b.usageCount - a.usageCount;
+    });
+    
+    return collections.slice(0, limitCount);
+  } catch (error) {
+    console.error('Error in loadTopRatedCollections:', error);
+    return [];
+  }
+};
+
+export const deleteCollection = async (collectionId: string): Promise<void> => {
+  await deleteDoc(doc(db, 'collections', collectionId));
+};
+
+export const updateCollection = async (collectionId: string, updates: Partial<WordCollection>): Promise<void> => {
+  console.log('Updating collection:', collectionId, updates);
+  await updateDoc(doc(db, 'collections', collectionId), updates);
+};
+
+// Learning Progress Functions
+export const markCollectionAsLearned = async (userId: string, collectionId: string): Promise<void> => {
+  // Check if already exists
+  const q = query(
+    collection(db, 'learned_collections'),
+    where('userId', '==', userId),
+    where('collectionId', '==', collectionId)
+  );
+  
+  const querySnapshot = await getDocs(q);
+  
+  if (querySnapshot.empty) {
+    // Create new learned record
+    await addDoc(collection(db, 'learned_collections'), {
+      userId,
+      collectionId,
+      learnedAt: new Date(),
+      perfectScoreCount: 1
+    });
+  } else {
+    // Update existing record
+    const docRef = querySnapshot.docs[0].ref;
+    await updateDoc(docRef, {
+      perfectScoreCount: increment(1),
+      learnedAt: new Date()
+    });
+  }
+  
+  // Update collection usage count
+  await updateDoc(doc(db, 'collections', collectionId), {
+    usageCount: increment(1)
+  });
+};
+
+export const isCollectionLearned = async (userId: string, collectionId: string): Promise<boolean> => {
+  const q = query(
+    collection(db, 'learned_collections'),
+    where('userId', '==', userId),
+    where('collectionId', '==', collectionId)
+  );
+  
+  const querySnapshot = await getDocs(q);
+  return !querySnapshot.empty;
+};
+
+export const getLearnedCollections = async (userId: string): Promise<LearnedCollection[]> => {
+  const q = query(
+    collection(db, 'learned_collections'),
+    where('userId', '==', userId)
+  );
+  
+  const querySnapshot = await getDocs(q);
+  
+  return querySnapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data(),
+    learnedAt: doc.data().learnedAt.toDate()
+  })) as LearnedCollection[];
+};
+
+// Saved Collections Functions
+export const saveCollectionForUser = async (userId: string, collectionId: string): Promise<void> => {
+  // Check if already saved
+  const q = query(
+    collection(db, 'saved_collections'),
+    where('userId', '==', userId),
+    where('collectionId', '==', collectionId)
+  );
+  
+  const querySnapshot = await getDocs(q);
+  
+  if (querySnapshot.empty) {
+    await addDoc(collection(db, 'saved_collections'), {
+      userId,
+      collectionId,
+      savedAt: new Date()
+    });
+  }
+};
+
+export const removeSavedCollection = async (userId: string, collectionId: string): Promise<void> => {
+  const q = query(
+    collection(db, 'saved_collections'),
+    where('userId', '==', userId),
+    where('collectionId', '==', collectionId)
+  );
+  
+  const querySnapshot = await getDocs(q);
+  
+  querySnapshot.docs.forEach(async (docSnapshot) => {
+    await deleteDoc(docSnapshot.ref);
+  });
+};
+
+export const isCollectionSaved = async (userId: string, collectionId: string): Promise<boolean> => {
+  const q = query(
+    collection(db, 'saved_collections'),
+    where('userId', '==', userId),
+    where('collectionId', '==', collectionId)
+  );
+  
+  const querySnapshot = await getDocs(q);
+  return !querySnapshot.empty;
+};
+
+// Statistics Functions
+export const getUserStats = async (userId: string): Promise<CollectionStats> => {
+  const [userCollections, savedCollections, learnedCollections] = await Promise.all([
+    loadUserCollections(userId),
+    loadSavedCollections(userId),
+    getLearnedCollections(userId)
+  ]);
+  
+  const publicCollections = userCollections.filter(c => c.visibility === 'public').length;
+  const privateCollections = userCollections.filter(c => c.visibility === 'private').length;
+  
+  const totalWords = userCollections.reduce((total, c) => total + c.words.length, 0);
+  const learnedWords = await calculateLearnedWords(userId, learnedCollections);
+  
+  return {
+    totalCollections: userCollections.length,
+    publicCollections,
+    privateCollections,
+    learnedCollections: learnedCollections.length,
+    savedCollections: savedCollections.length,
+    totalWords,
+    learnedWords
+  };
+};
+
+const calculateLearnedWords = async (userId: string, learnedCollections: LearnedCollection[]): Promise<number> => {
+  let totalLearnedWords = 0;
+  
+  for (const learned of learnedCollections) {
+    const collectionsQuery = query(
+      collection(db, 'collections'),
+      where('__name__', '==', learned.collectionId)
+    );
+    
+    const snapshot = await getDocs(collectionsQuery);
+    if (!snapshot.empty) {
+      const collectionData = snapshot.docs[0].data() as WordCollection;
+      totalLearnedWords += collectionData.words.length;
+    }
+  }
+  
+  return totalLearnedWords;
+};
+
+// Rating Functions
+export const updateCollectionRating = async (collectionId: string): Promise<void> => {
+  // Calculate new rating based on usage count and user engagement
+  const collectionRef = doc(db, 'collections', collectionId);
+  
+  // For now, simple rating calculation based on usage
+  await updateDoc(collectionRef, {
+    usageCount: increment(1),
+    rating: increment(0.1) // Each usage adds 0.1 to rating
+  });
+};
+
+// Migration function to fix old collections
+export const migrateOldCollections = async (): Promise<void> => {
+  try {
+    console.log('🔧 Migrating old collections...');
+    
+    // Get all collections that need migration
+    const allCollectionsQuery = query(collection(db, 'collections'));
+    const snapshot = await getDocs(allCollectionsQuery);
+    
+    let updateCount = 0;
+    
+    for (const docSnapshot of snapshot.docs) {
+      const data = docSnapshot.data();
+      const needsUpdate = !data.username || !data.visibility || !data.hasOwnProperty('rating') || !data.hasOwnProperty('usageCount');
+      
+      if (needsUpdate) {
+        console.log('🔄 Updating collection:', data.name);
+        
+        // Try to find username from users collection or use default
+        let username = data.username || 'Unknown User';
+        
+        // Try to get username from users collection
+        if (data.userId && !data.username) {
+          try {
+            const userDoc = await getDocs(query(
+              collection(db, 'users'),
+              where('__name__', '==', data.userId)
+            ));
+            
+            if (!userDoc.empty) {
+              const userData = userDoc.docs[0].data();
+              username = userData.username || 'Unknown User';
+            }
+          } catch (userError) {
+            console.log('Could not fetch username for user:', data.userId);
+          }
+        }
+        
+        await updateDoc(docSnapshot.ref, {
+          username: username,
+          visibility: data.visibility || 'public', // Default to public for old collections
+          rating: data.rating || 0,
+          usageCount: data.usageCount || 0
+        });
+        
+        updateCount++;
+      }
+    }
+    
+    console.log(`✅ Migration completed - Updated ${updateCount} collections`);
+    
+  } catch (error) {
+    console.error('❌ Error migrating collections:', error);
+  }
+};
+
+// Debug function to check all collections
+export const debugAllCollections = async (): Promise<void> => {
+  try {
+    console.log('🔍 Debugging all collections...');
+    
+    const allCollectionsQuery = query(collection(db, 'collections'));
+    const allSnapshot = await getDocs(allCollectionsQuery);
+    
+    console.log(`📊 Total collections in database: ${allSnapshot.docs.length}`);
+    
+    allSnapshot.docs.forEach((doc, index) => {
+      const data = doc.data();
+      console.log(`${index + 1}. Collection:`, {
+        id: doc.id,
+        name: data.name,
+        userId: data.userId,
+        username: data.username,
+        visibility: data.visibility,
+        wordsCount: data.words?.length || 0,
+        usageCount: data.usageCount || 0
+      });
+    });
+    
+  } catch (error) {
+    console.error('Error debugging collections:', error);
+  }
+};
+
+// Leaderboard Functions
+export const getLeaderboardData = async (): Promise<LeaderboardUser[]> => {
+  try {
+    console.log('Loading leaderboard data...');
+    
+    // First, get ALL users from the users collection
+    const allUsersQuery = query(collection(db, 'users'));
+    const allUsersSnapshot = await getDocs(allUsersQuery);
+    
+    console.log(`👥 Total users found: ${allUsersSnapshot.docs.length}`);
+    
+    // Initialize user stats for all users
+    const userStats = new Map<string, {
+      username: string;
+      totalCollections: number;
+      publicCollections: number;
+      totalWords: number;
+      totalUsage: number;
+      totalExams: number;
+      totalExamScore: number;
+      perfectExams: number;
+    }>();
+    
+    // Add all users to the map with default values
+    allUsersSnapshot.docs.forEach(doc => {
+      const userData = doc.data();
+      userStats.set(doc.id, {
+        username: userData.username || `user_${doc.id.substring(0, 8)}`,
+        totalCollections: 0,
+        publicCollections: 0,
+        totalWords: 0,
+        totalUsage: 0,
+        totalExams: 0,
+        totalExamScore: 0,
+        perfectExams: 0
+      });
+    });
+    
+    // Now get collections and update user stats
+    const allCollectionsQuery = query(collection(db, 'collections'));
+    const allCollectionsSnapshot = await getDocs(allCollectionsQuery);
+    
+    console.log(`📝 Total collections found: ${allCollectionsSnapshot.docs.length}`);
+    
+    allCollectionsSnapshot.docs.forEach(doc => {
+      const collectionData = doc.data();
+      const userId = collectionData.userId;
+      
+      // Skip collections without userId or if user not in our users list
+      if (!userId || !userStats.has(userId)) {
+        console.log('⚠️ Skipping collection without valid userId:', {
+          id: doc.id,
+          name: collectionData.name,
+          userId
+        });
+        return;
+      }
+      
+      const userStat = userStats.get(userId)!;
+      
+      // Count total collections
+      userStat.totalCollections++;
+      
+      // Count public collections separately
+      const isPublic = collectionData.visibility === 'public' || !collectionData.visibility;
+      if (isPublic) {
+        userStat.publicCollections++;
+        userStat.totalWords += collectionData.words?.length || 0;
+        userStat.totalUsage += collectionData.usageCount || 0;
+      }
+    });
+    
+    // Get learned words count for each user
+    console.log('📖 Getting learned collections...');
+    const userLearnedWords = new Map<string, number>();
+    
+    try {
+      const learnedQuery = query(collection(db, 'learned_collections'));
+      const learnedSnapshot = await getDocs(learnedQuery);
+      
+      console.log(`📚 Found ${learnedSnapshot.docs.length} learned collections`);
+      
+      for (const doc of learnedSnapshot.docs) {
+        const learnedData = doc.data();
+        const userId = learnedData.userId;
+        const collectionId = learnedData.collectionId;
+        
+        // Find the collection to get word count
+        const collectionDoc = await getDocs(query(
+          collection(db, 'collections'),
+          where('__name__', '==', collectionId)
+        ));
+        
+        if (!collectionDoc.empty) {
+          const collectionData = collectionDoc.docs[0].data();
+          const wordCount = collectionData.words?.length || 0;
+          
+          userLearnedWords.set(userId, (userLearnedWords.get(userId) || 0) + wordCount);
+        }
+      }
+    } catch (learnedError) {
+      console.error('❌ Error getting learned collections (skipping):', learnedError);
+      // Continue without learned data
+    }
+
+    // Get exam results for leaderboard stats
+    try {
+      const examResultsQuery = query(collection(db, 'exam_results'));
+      const examResultsSnapshot = await getDocs(examResultsQuery);
+      
+      console.log(`🎓 Found ${examResultsSnapshot.docs.length} exam results`);
+      
+      for (const doc of examResultsSnapshot.docs) {
+        const examData = doc.data();
+        const userId = examData.userId;
+        
+        if (userStats.has(userId)) {
+          const userStat = userStats.get(userId)!;
+          userStat.totalExams++;
+          userStat.totalExamScore += examData.scorePercentage || 0;
+          
+          if (examData.scorePercentage >= 100) {
+            userStat.perfectExams++;
+          }
+        }
+      }
+    } catch (examError) {
+      console.error('❌ Error getting exam results (skipping):', examError);
+      // Continue without exam data
+    }
+    
+    // Convert to LeaderboardUser array - SHOW ALL USERS
+    const leaderboardUsers: LeaderboardUser[] = [];
+    
+    userStats.forEach((stats, userId) => {
+      leaderboardUsers.push({
+        id: userId,
+        username: stats.username,
+        totalCollections: stats.publicCollections, // Show only public collections for consistency
+        publicCollections: stats.publicCollections,
+        totalWords: stats.totalWords,
+        learnedWords: userLearnedWords.get(userId) || 0,
+        totalUsage: stats.totalUsage,
+        totalExams: stats.totalExams,
+        averageExamScore: stats.totalExams > 0 ? stats.totalExamScore / stats.totalExams : 0,
+        perfectExams: stats.perfectExams,
+        joinedAt: new Date(2024, 0, 1) // Placeholder
+      });
+    });
+    
+    console.log('Leaderboard data loaded:', leaderboardUsers.length, 'total users');
+    return leaderboardUsers;
+    
+  } catch (error) {
+    console.error('Error loading leaderboard data:', error);
+    return [];
+  }
+};
+
+export const getTopCreators = async (limitCount: number = 10): Promise<LeaderboardUser[]> => {
+  const allUsers = await getLeaderboardData();
+  
+  // Sort by number of collections created (primary) and total words (secondary)
+  const sortedByCreation = [...allUsers].sort((a, b) => {
+    if (b.totalCollections !== a.totalCollections) {
+      return b.totalCollections - a.totalCollections;
+    }
+    return b.totalWords - a.totalWords;
+  });
+  
+  // Add ranks for creation leaderboard
+  sortedByCreation.forEach((user, index) => {
+    user.rank = index + 1;
+  });
+  
+  return sortedByCreation.slice(0, limitCount);
+};
+
+export const getTopLearners = async (limitCount: number = 10): Promise<LeaderboardUser[]> => {
+  const allUsers = await getLeaderboardData();
+  
+  // Sort by learned words (primary) and total collections (secondary)
+  const sortedByLearning = [...allUsers].sort((a, b) => {
+    if (b.learnedWords !== a.learnedWords) {
+      return b.learnedWords - a.learnedWords;
+    }
+    return b.totalCollections - a.totalCollections;
+  });
+  
+  // Add ranks for learning leaderboard
+  sortedByLearning.forEach((user, index) => {
+    user.rank = index + 1;
+  });
+  
+  return sortedByLearning.slice(0, limitCount);
+};
+
+// Legacy compatibility
+export const loadCollections = loadUserCollections;
+
+export const generateId = (): string => {
+  return Math.random().toString(36).substr(2, 9);
+};
+const SETTINGS_KEY = 'vocabulary_settings';
+
+export const saveSettings = (settings: any): void => {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+};
+
+export const loadSettings = (): any => {
+  const stored = localStorage.getItem(SETTINGS_KEY);
+  if (!stored) return { autoAdvance: true, darkMode: false };
+  
+  try {
+    const parsed = JSON.parse(stored);
+    return { autoAdvance: true, darkMode: false, ...parsed };
+  } catch {
+    return { autoAdvance: true, darkMode: false };
+  }
+};
+
+// Public Exam functions
+export const savePublicExam = async (
+  userId: string, 
+  username: string, 
+  examSettings: ExamSettings
+): Promise<PublicExam> => {
+  if (!examSettings.name || !examSettings.isPublic) {
+    throw new Error('Name is required for public exams');
+  }
+  
+  // Create a clean exam object without functions or undefined values
+  const newExam = {
+    name: examSettings.name,
+    description: examSettings.description || '',
+    userId: userId,
+    username: username,
+    settings: {
+      selectedCollections: examSettings.selectedCollections,
+      variantCount: examSettings.variantCount,
+      wordCount: examSettings.wordCount,
+      timeLimit: examSettings.timeLimit,
+      isPublic: examSettings.isPublic,
+      name: examSettings.name,
+      description: examSettings.description
+    },
+    createdAt: new Date(),
+    totalAttempts: 0,
+    averageScore: 0,
+    rating: 0
+  };
+  
+  console.log('🔥 Attempting to save public exam:', newExam);
+  
+  try {
+    // Test collection write permission first
+    console.log('🧪 Testing collection access...');
+    const testCollectionRef = collection(db, 'public_exams');
+    console.log('🧪 Collection reference created successfully');
+    
+    const docRef = await addDoc(testCollectionRef, newExam);
+    console.log('✅ Public exam saved successfully with ID:', docRef.id);
+    
+    return {
+      id: docRef.id,
+      ...newExam
+    };
+  } catch (error) {
+    console.error('❌ Detailed error in savePublicExam:', {
+      message: error.message,
+      code: error.code,
+      details: error
+    });
+    
+    // Try alternative approach - add to collections with public flag
+    console.log('🔄 Trying alternative approach - saving as public collection...');
+    try {
+      const altCollection = {
+        ...newExam,
+        isPublicExam: true,
+        examType: 'public'
+      };
+      const altDocRef = await addDoc(collection(db, 'collections'), altCollection);
+      console.log('✅ Alternative save successful:', altDocRef.id);
+      
+      return {
+        id: altDocRef.id,
+        ...altCollection
+      };
+    } catch (altError) {
+      console.error('❌ Alternative approach also failed:', altError);
+      throw error; // Throw original error
+    }
+  }
+};
+
+export const loadAllPublicExams = async (limitCount: number = 50): Promise<PublicExam[]> => {
+  try {
+    // Try loading from public_exams collection first
+    const q = query(
+      collection(db, 'public_exams'),
+      orderBy('createdAt', 'desc'),
+      limit(limitCount)
+    );
+    
+    const querySnapshot = await getDocs(q);
+    console.log('📊 Loaded public exams from public_exams collection:', querySnapshot.docs.length);
+    
+    return querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+      createdAt: doc.data().createdAt.toDate()
+    })) as PublicExam[];
+  } catch (error) {
+    console.log('⚠️ Failed to load from public_exams, trying collections instead...');
+    
+    // Alternative approach - load from collections with public exam flag
+    const q = query(
+      collection(db, 'collections'),
+      where('isPublicExam', '==', true),
+      limit(limitCount)
+    );
+    
+    const querySnapshot = await getDocs(q);
+    console.log('📊 Loaded public exams from collections:', querySnapshot.docs.length);
+    
+    return querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+      createdAt: doc.data().createdAt.toDate()
+    })) as PublicExam[];
+  }
+};
+
+export const loadUserPublicExams = async (userId: string): Promise<PublicExam[]> => {
+  try {
+    // Try loading from public_exams collection first
+    const q = query(
+      collection(db, 'public_exams'),
+      where('userId', '==', userId),
+      orderBy('createdAt', 'desc')
+    );
+    
+    const querySnapshot = await getDocs(q);
+    console.log('📊 Loaded user public exams from public_exams:', querySnapshot.docs.length);
+    
+    return querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+      createdAt: doc.data().createdAt.toDate()
+    })) as PublicExam[];
+  } catch (error) {
+    console.log('⚠️ Failed to load user exams from public_exams, trying collections...');
+    
+    // Alternative approach - load from collections with public exam flag
+    const q = query(
+      collection(db, 'collections'),
+      where('userId', '==', userId),
+      where('isPublicExam', '==', true)
+    );
+    
+    const querySnapshot = await getDocs(q);
+    console.log('📊 Loaded user public exams from collections:', querySnapshot.docs.length);
+    
+    return querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+      createdAt: doc.data().createdAt.toDate()
+    })) as PublicExam[];
+  }
+};
+
+export const updateExamStats = async (examId: string, score: number, totalQuestions: number) => {
+  try {
+    // Try updating in public_exams first
+    const examRef = doc(db, 'public_exams', examId);
+    await updateDoc(examRef, {
+      totalAttempts: increment(1),
+      averageScore: score / totalQuestions * 100
+    });
+    console.log('✅ Exam stats updated in public_exams:', examId);
+  } catch (error) {
+    console.log('⚠️ Failed to update in public_exams, trying collections...');
+    
+    try {
+      // Try updating in collections instead
+      const examRef = doc(db, 'collections', examId);
+      await updateDoc(examRef, {
+        totalAttempts: increment(1),
+        averageScore: score / totalQuestions * 100
+      });
+      console.log('✅ Exam stats updated in collections:', examId);
+    } catch (error) {
+      console.error('❌ Error updating exam stats in both tables:', error);
+    }
+  }
+};
+
+// Save individual exam result for leaderboard stats
+export const saveExamResult = async (
+  userId: string, 
+  score: number, 
+  totalQuestions: number, 
+  timeSpent: number,
+  examSettings?: ExamSettings
+) => {
+  const scorePercentage = (score / totalQuestions) * 100;
+  
+  const examResult = {
+    userId,
+    score,
+    totalQuestions,
+    scorePercentage,
+    timeSpent,
+    examSettings: examSettings || null,
+    completedAt: new Date()
+  };
+  
+  await addDoc(collection(db, 'exam_results'), examResult);
+};

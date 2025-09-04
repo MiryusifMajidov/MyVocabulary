@@ -1,0 +1,61 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Users - for user profiles and data
+    match /users/{userId} {
+      // Allow reading any user when authenticated (for validation and leaderboard)
+      allow read: if request.auth != null;
+      // Allow writing only own user document
+      allow write: if request.auth != null && request.auth.uid == userId;
+      // Allow creating user document during registration
+      allow create: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Main collections - users can read/write their own collections
+    // For leaderboard: allow reading ALL collections (both public and private for stats)
+    match /collections/{document} {
+      allow read: if request.auth != null;
+      allow update, delete: if request.auth != null
+        && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null
+        && request.auth.uid == request.resource.data.userId;
+    }
+
+    // Learned collections - users can only manage their own learned status
+    match /learned_collections/{document} {
+      // Allow reading any learned collection for leaderboard stats
+      allow read: if request.auth != null;
+      // Allow writing only own learned status
+      allow write: if request.auth != null
+        && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null
+        && request.auth.uid == request.resource.data.userId;
+    }
+
+    // Saved collections - users can only manage their own saved collections
+    match /saved_collections/{document} {
+      allow read, write: if request.auth != null
+        && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null
+        && request.auth.uid == request.resource.data.userId;
+    }
+
+    // Exam results - users can manage their own exam results
+    match /exam_results/{document} {
+      allow read, write: if request.auth != null
+        && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null
+        && request.auth.uid == request.resource.data.userId;
+    }
+
+    // Public exams - all authenticated users can read, only creators can update/delete
+    match /public_exams/{document} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+        && request.auth.uid == request.resource.data.userId;
+      allow update, delete: if request.auth != null
+        && request.auth.uid == resource.data.userId;
+    }
+  }
+}
