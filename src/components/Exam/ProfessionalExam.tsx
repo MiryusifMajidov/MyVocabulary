@@ -59,7 +59,7 @@ export const ProfessionalExam: React.FC<ProfessionalExamProps> = ({
       }
 
       // Fisher-Yates shuffle for better randomization
-      const shuffleArray = <T>(array: T[]): T[] => {
+      const shuffleArray = <T,>(array: T[]): T[] => {
         const shuffled = [...array];
         for (let i = shuffled.length - 1; i > 0; i--) {
           const j = Math.floor(Math.random() * (i + 1));
