@@ -4,6 +4,7 @@ export interface Word {
   english?: string; // Backwards compatibility
   meaning: string;
   type?: string; // word type (noun, verb, etc.)
+  exampleSentence?: string; // Optional example sentence
 }
 
 export interface WordCollection {

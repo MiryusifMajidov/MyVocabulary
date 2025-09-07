@@ -20,17 +20,20 @@ export const CreateCollection: React.FC<CreateCollectionProps> = ({
   const [words, setWords] = useState<Word[]>([]);
   const [currentEnglish, setCurrentEnglish] = useState('');
   const [currentMeaning, setCurrentMeaning] = useState('');
+  const [currentExampleSentence, setCurrentExampleSentence] = useState('');
 
   const addWord = () => {
     if (currentEnglish.trim() && currentMeaning.trim() && words.length < 30) {
       const newWord: Word = {
         id: generateId(),
         english: currentEnglish.trim(),
-        meaning: currentMeaning.trim()
+        meaning: currentMeaning.trim(),
+        exampleSentence: currentExampleSentence.trim() || undefined
       };
       setWords([...words, newWord]);
       setCurrentEnglish('');
       setCurrentMeaning('');
+      setCurrentExampleSentence('');
     }
   };
 
@@ -195,7 +198,7 @@ export const CreateCollection: React.FC<CreateCollectionProps> = ({
           </div>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-4 mb-6">
+        <div className="grid md:grid-cols-2 gap-4 mb-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               İngilis dili sözü
@@ -220,6 +223,19 @@ export const CreateCollection: React.FC<CreateCollectionProps> = ({
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200"
             />
           </div>
+        </div>
+        
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Nümunə cümlə (isteğe bağlı)
+          </label>
+          <input
+            type="text"
+            value={currentExampleSentence}
+            onChange={(e) => setCurrentExampleSentence(e.target.value)}
+            placeholder="Hello, how are you?"
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200"
+          />
         </div>
 
         <button
@@ -251,19 +267,26 @@ export const CreateCollection: React.FC<CreateCollectionProps> = ({
             {words.map((word) => (
               <div
                 key={word.id}
-                className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors duration-200"
+                className="p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors duration-200"
               >
-                <div className="flex-1">
-                  <span className="font-medium text-gray-800">{word.english}</span>
-                  <span className="text-gray-600 mx-3">→</span>
-                  <span className="text-gray-700">{word.meaning}</span>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex-1">
+                    <span className="font-medium text-gray-800">{word.english}</span>
+                    <span className="text-gray-600 mx-3">→</span>
+                    <span className="text-gray-700">{word.meaning}</span>
+                  </div>
+                  <button
+                    onClick={() => removeWord(word.id)}
+                    className="p-1 text-gray-400 hover:text-red-500 transition-colors duration-200"
+                  >
+                    <Plus className="w-4 h-4 transform rotate-45" />
+                  </button>
                 </div>
-                <button
-                  onClick={() => removeWord(word.id)}
-                  className="p-1 text-gray-400 hover:text-red-500 transition-colors duration-200"
-                >
-                  <Plus className="w-4 h-4 transform rotate-45" />
-                </button>
+                {word.exampleSentence && (
+                  <div className="text-sm text-gray-600 italic pl-2 border-l-2 border-blue-200">
+                    "{word.exampleSentence}"
+                  </div>
+                )}
               </div>
             ))}
           </div>

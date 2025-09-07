@@ -21,9 +21,10 @@ export const Quiz: React.FC<QuizProps> = ({
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
-  const [showResult, setShowResult] = useState(false);
+  const [, setShowResult] = useState(false);
   const [correctAnswers, setCorrectAnswers] = useState(0);
   const [canAdvance, setCanAdvance] = useState(false);
+  const [clickedOption, setClickedOption] = useState<number | null>(null);
 
   useEffect(() => {
     setQuestions(generateQuizQuestions(collection.words, quizMode));
@@ -37,6 +38,7 @@ export const Quiz: React.FC<QuizProps> = ({
       setSelectedOption(null);
       setShowResult(false);
       setCanAdvance(false);
+      setClickedOption(null);
     } else {
       const result: QuizResult = {
         correct: correctAnswers,
@@ -79,6 +81,39 @@ export const Quiz: React.FC<QuizProps> = ({
     return 'bg-gray-100 border-gray-200 text-gray-500';
   };
 
+  const handleOptionClick = (optionIndex: number) => {
+    if (selectedOption !== null) {
+      // If answer was already selected, and this is manual mode, show translation
+      if (!autoAdvance) {
+        setClickedOption(clickedOption === optionIndex ? null : optionIndex);
+      }
+      return;
+    }
+    
+    // First time selecting an option
+    handleOptionSelect(optionIndex);
+  };
+
+  const getTranslationForOption = (option: string) => {
+    // Find the word that matches this option
+    const word = collection.words.find(w => {
+      if (currentQuestion.mode === 'english-to-meaning') {
+        return w.meaning === option;
+      } else {
+        return (w.word || w.english) === option;
+      }
+    });
+    
+    if (!word) return null;
+    
+    // Return the opposite translation
+    if (currentQuestion.mode === 'english-to-meaning') {
+      return word.word || word.english;
+    } else {
+      return word.meaning;
+    }
+  };
+
   if (!currentQuestion) {
     return <div>Yüklənir...</div>;
   }
@@ -117,27 +152,60 @@ export const Quiz: React.FC<QuizProps> = ({
         </div>
 
         <div className="grid gap-4">
-          {currentQuestion.options.map((option, index) => (
-            <button
-              key={index}
-              onClick={() => handleOptionSelect(index)}
-              disabled={selectedOption !== null}
-              className={`p-4 rounded-xl text-left font-medium transition-all duration-300 transform hover:scale-102 ${getOptionStyle(index)}`}
-            >
-              <div className="flex items-center justify-between">
-                <span>{option}</span>
-                {selectedOption !== null && (
-                  <div>
-                    {index === currentQuestion.correctIndex ? (
-                      <CheckCircle className="w-5 h-5 text-white" />
-                    ) : index === selectedOption ? (
-                      <XCircle className="w-5 h-5 text-white" />
-                    ) : null}
+          {currentQuestion.options.map((option, index) => {
+            const translation = selectedOption !== null && !autoAdvance ? getTranslationForOption(option, index) : null;
+            const showTranslation = clickedOption === index && translation;
+            
+            return (
+              <div key={index} className="relative">
+                <button
+                  onClick={() => handleOptionClick(index)}
+                  disabled={false}
+                  className={`w-full p-4 rounded-xl text-left font-medium transition-all duration-300 transform hover:scale-102 ${getOptionStyle(index)} ${selectedOption !== null && !autoAdvance ? 'cursor-pointer' : selectedOption !== null ? 'cursor-default' : ''}`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span>{option}</span>
+                    <div className="flex items-center space-x-2">
+                      {selectedOption !== null && (
+                        <div>
+                          {index === currentQuestion.correctIndex ? (
+                            <CheckCircle className="w-5 h-5 text-white" />
+                          ) : index === selectedOption ? (
+                            <XCircle className="w-5 h-5 text-white" />
+                          ) : null}
+                        </div>
+                      )}
+                      {selectedOption !== null && !autoAdvance && translation && (
+                        <span className="text-xs opacity-70">
+                          {showTranslation ? '↑' : '↓'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </button>
+                
+                {showTranslation && (
+                  <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
+                    <div className="font-medium">Tərcümə: {translation}</div>
+                    {(() => {
+                      const word = collection.words.find(w => {
+                        if (currentQuestion.mode === 'english-to-meaning') {
+                          return w.meaning === option;
+                        } else {
+                          return (w.word || w.english) === option;
+                        }
+                      });
+                      return word?.exampleSentence && (
+                        <div className="mt-1 text-blue-600 italic">
+                          Nümunə: "{word.exampleSentence}"
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
               </div>
-            </button>
-          ))}
+            );
+          })}
         </div>
 
         {!autoAdvance && canAdvance && (
