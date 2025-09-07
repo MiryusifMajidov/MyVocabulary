@@ -44,56 +44,91 @@ export class GeminiService {
   }
 
   private getMockResponse(prompt: string): string {
-    const responses = [
-      "Hello! I'm your AI English teacher. Let's practice together! Can you tell me about your day?",
-      "That's great! I noticed you used some words we've been learning. Let me help you with pronunciation and usage.",
-      "Excellent! Let's try using the word 'beautiful' in a sentence. Can you describe something beautiful you saw today?",
-      "Perfect! You're making great progress. Let me suggest a new word: 'magnificent' - it means very beautiful or impressive.",
-      "Well done! I can see you're understanding these concepts well. Would you like to practice with some new vocabulary?",
-    ];
-    return responses[Math.floor(Math.random() * responses.length)];
+    // Check if this is a conversation continuation by looking for previous messages
+    const hasConversationHistory = prompt.includes('CONVERSATION HISTORY:') && prompt.includes('Student:');
+    
+    if (hasConversationHistory) {
+      // Extract the last user message for context
+      const lines = prompt.split('\n');
+      let lastUserMessage = '';
+      for (let i = lines.length - 1; i >= 0; i--) {
+        if (lines[i].startsWith('Student:')) {
+          lastUserMessage = lines[i].replace('Student:', '').trim().toLowerCase();
+          break;
+        }
+      }
+      
+      // Respond based on user's actual message
+      if (lastUserMessage.includes('day') || lastUserMessage.includes('today')) {
+        return "That sounds interesting! What did you learn today? I'd love to help you practice those new words.";
+      } else if (lastUserMessage.includes('learn') || lastUserMessage.includes('english') || lastUserMessage.includes('improve')) {
+        return "That's wonderful! Learning English is a great goal. What specific areas would you like to work on - vocabulary, grammar, or conversation?";
+      } else if (lastUserMessage.includes('yes') || lastUserMessage.includes('ok') || lastUserMessage.includes('sure')) {
+        return "Great! Let's start with some vocabulary. Can you tell me about your hobbies or interests? I'll help you learn new words related to those topics.";
+      } else if (lastUserMessage.includes('no') || lastUserMessage.includes('not really')) {
+        return "No problem! How about we talk about something else? What are you interested in - sports, movies, music, or travel?";
+      } else {
+        // Generic contextual response
+        return `I see you mentioned "${lastUserMessage.split(' ')[0]}". That's a good topic to practice with! Can you tell me more about it using simple sentences?`;
+      }
+    } else {
+      // Welcome message for new conversations
+      const welcomeMessages = [
+        "Hello! I'm your AI English teacher. I'm here to help you improve your English through conversation. What would you like to talk about today?",
+        "Hi there! Welcome to our English practice session. I'm excited to help you learn! How are you feeling about practicing English today?",
+        "Greetings! I'm your personal English tutor. Let's have a friendly conversation to practice your skills. Tell me, what interests you most?"
+      ];
+      return welcomeMessages[Math.floor(Math.random() * welcomeMessages.length)];
+    }
   }
 
-  generateSystemPrompt(context: AITeacherContext): string {
+  generateSystemPrompt(context: AITeacherContext, username?: string): string {
     const { userLevel, learnedWords, focusWords, conversationGoals } = context;
     
     const learnedWordsText = learnedWords.slice(0, 20).map(w => w.english || w.word).join(', ');
     const focusWordsText = focusWords.slice(0, 10).join(', ');
     const goals = conversationGoals.length > 0 ? conversationGoals.join(', ') : 'general English practice';
+    const studentName = username || 'Student';
 
-    return `You are an AI English teacher helping a ${userLevel} level student improve their English.
+    return `You are an AI English teacher helping ${studentName}, a ${userLevel} level student, improve their English.
 
-STUDENT CONTEXT:
+STUDENT PROFILE:
+- Name: ${studentName}
 - Level: ${userLevel}
-- Recently learned words: ${learnedWordsText}
-- Focus on using these words: ${focusWordsText}
+- Words already learned: ${learnedWordsText}
+- Current focus words: ${focusWordsText}
 - Learning goals: ${goals}
+- Total learned words: ${learnedWords.length}
 
 TEACHING INSTRUCTIONS:
-1. Use simple, clear language appropriate for ${userLevel} level
-2. Frequently use the words the student has learned: ${learnedWordsText}
-3. Emphasize these focus words in conversations: ${focusWordsText}
-4. Gently correct mistakes and explain why
-5. Ask engaging questions to keep the conversation flowing
-6. Suggest 1-2 new words per message when appropriate
-7. Be encouraging and supportive
-8. Make learning fun and interactive
+1. Address the student by their name (${studentName}) occasionally to make it personal
+2. Use simple, clear language appropriate for ${userLevel} level
+3. Frequently incorporate the words they've already learned: ${learnedWordsText}
+4. Emphasize these focus words in conversations: ${focusWordsText}
+5. Gently correct mistakes and explain why
+6. Ask engaging questions to keep the conversation flowing
+7. Suggest 1-2 new words per message when appropriate
+8. Be encouraging and supportive about their progress
+9. Reference their learned vocabulary to build confidence
+10. Make learning fun and interactive
 
 CONVERSATION STYLE:
-- Be friendly and patient
+- Be friendly, patient, and encouraging
 - Use examples and context for new words
 - Ask follow-up questions
-- Praise good usage
+- Praise good usage and progress
 - Keep responses concise (2-4 sentences max)
+- Celebrate their achievements (${learnedWords.length} words learned!)
 
-Remember: Your goal is to help the student practice English naturally while reinforcing their learned vocabulary.`;
+Remember: Your goal is to help ${studentName} practice English naturally while reinforcing their learned vocabulary and building their confidence.`;
   }
 
   async generateResponse(
     messages: AIMessage[],
-    context: AITeacherContext
+    context: AITeacherContext,
+    username?: string
   ): Promise<{ content: string; usedWords: string[]; suggestedWords: Word[]; difficulty: number }> {
-    const systemPrompt = this.generateSystemPrompt(context);
+    const systemPrompt = this.generateSystemPrompt(context, username);
     const conversationHistory = messages.slice(-6).map(msg => 
       `${msg.sender === 'user' ? 'Student' : 'Teacher'}: ${msg.content}`
     ).join('\n');
