@@ -42,10 +42,26 @@ export const AITeacher: React.FC<AITeacherProps> = ({
   const [recognition, setRecognition] = useState<SpeechRecognition | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Initialize speech recognition
+  // Initialize speech recognition and synthesis
   useEffect(() => {
     console.log('🎤 Checking speech recognition support...');
     
+    // Initialize Speech Synthesis
+    if ('speechSynthesis' in window) {
+      console.log('🔊 Speech synthesis supported, loading voices...');
+      
+      // Load voices
+      const loadVoices = () => {
+        const voices = speechSynthesis.getVoices();
+        console.log('🔊 Loaded voices:', voices.length, voices.map(v => v.name));
+      };
+      
+      // Load voices immediately and on voiceschanged event
+      loadVoices();
+      speechSynthesis.onvoiceschanged = loadVoices;
+    }
+    
+    // Initialize Speech Recognition
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
       try {
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -221,25 +237,79 @@ export const AITeacher: React.FC<AITeacherProps> = ({
   };
 
   const speakText = (text: string) => {
-    if ('speechSynthesis' in window) {
-      speechSynthesis.cancel();
-      
+    console.log('🔊 Attempting to speak text:', text.substring(0, 50) + '...');
+    
+    if (!('speechSynthesis' in window)) {
+      console.error('🔊 Speech synthesis not supported in this browser');
+      alert('Bu brauzer səsləndirməni dəstəkləmir');
+      return;
+    }
+    
+    // Stop any current speech
+    speechSynthesis.cancel();
+    
+    // Wait a bit for cancel to complete
+    setTimeout(() => {
       const utterance = new SpeechSynthesisUtterance(text);
+      
+      // Set language and voice settings
       utterance.lang = 'en-US';
-      utterance.rate = 0.8;
+      utterance.rate = 0.9;
       utterance.pitch = 1.0;
       utterance.volume = 1.0;
       
-      utterance.onstart = () => console.log('🔊 Speech started');
-      utterance.onend = () => console.log('🔊 Speech ended');
-      utterance.onerror = (e) => console.error('🔊 Speech error:', e);
+      // Event listeners for debugging
+      utterance.onstart = () => {
+        console.log('🔊 Speech started successfully');
+      };
       
-      setTimeout(() => {
+      utterance.onend = () => {
+        console.log('🔊 Speech ended successfully');
+      };
+      
+      utterance.onerror = (event) => {
+        console.error('🔊 Speech error:', event);
+        alert('Səsləndirmə xətası: ' + event.error);
+      };
+      
+      utterance.onpause = () => console.log('🔊 Speech paused');
+      utterance.onresume = () => console.log('🔊 Speech resumed');
+      
+      // Check if voices are loaded
+      const voices = speechSynthesis.getVoices();
+      console.log('🔊 Available voices:', voices.length);
+      
+      if (voices.length > 0) {
+        // Try to find an English voice
+        const englishVoice = voices.find(voice => 
+          voice.lang.startsWith('en') || voice.name.toLowerCase().includes('english')
+        );
+        
+        if (englishVoice) {
+          utterance.voice = englishVoice;
+          console.log('🔊 Using voice:', englishVoice.name);
+        }
+      }
+      
+      // Speak the text - single call
+      console.log('🔊 Calling speechSynthesis.speak()');
+      try {
         speechSynthesis.speak(utterance);
-      }, 100);
-    } else {
-      console.error('🔊 Speech synthesis not supported');
-    }
+        console.log('🔊 Speech initiated successfully');
+        
+        // Check volume and rate
+        console.log('🔊 Utterance settings:', {
+          volume: utterance.volume,
+          rate: utterance.rate,
+          pitch: utterance.pitch,
+          lang: utterance.lang
+        });
+        
+      } catch (err) {
+        console.error('🔊 Speech initiation failed:', err);
+      }
+      
+    }, 200);
   };
 
   const startListening = () => {
