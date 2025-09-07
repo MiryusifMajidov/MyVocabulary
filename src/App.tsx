@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { WordCollection, QuizResult, AppSettings } from './types';
+import { WordCollection, QuizResult, AppSettings, Word } from './types';
 import { saveSettings, loadSettings } from './utils/storage';
 import { Home } from './components/Home';
 import { MyCollections } from './components/MyCollections';
@@ -10,6 +10,7 @@ import { Leaderboard } from './components/Leaderboard';
 import { Quiz } from './components/Quiz';
 import { QuizResult as QuizResultComponent } from './components/QuizResult';
 import { Settings } from './components/Settings';
+import { AITeacher } from './components/AITeacher';
 import { Login } from './components/Auth/Login';
 import { Register } from './components/Auth/Register';
 import { ExamSetup } from './components/Exam/ExamSetup';
@@ -20,7 +21,7 @@ import { ExamResult } from './components/Exam/ExamResult';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ExamSettings, PublicExam, QuizMode } from './types';
 
-type AppState = 'home' | 'collections' | 'all-collections' | 'all-exams' | 'my-exams' | 'leaderboard' | 'quiz' | 'result' | 'settings' | 'exam' | 'exam-active' | 'exam-result';
+type AppState = 'home' | 'collections' | 'all-collections' | 'all-exams' | 'my-exams' | 'leaderboard' | 'quiz' | 'result' | 'settings' | 'ai-teacher' | 'exam' | 'exam-active' | 'exam-result';
 type AuthState = 'login' | 'register';
 
 const AppContent = () => {
@@ -39,6 +40,7 @@ const AppContent = () => {
 const MainApp = () => {
   const { currentUser } = useAuth();
   const [collections, setCollections] = useState<WordCollection[]>([]);
+  const [learnedWords, setLearnedWords] = useState<Word[]>([]);
   const [settings, setAppSettings] = useState<AppSettings>({ autoAdvance: true, quizMode: 'english-to-meaning' });
   const [currentState, setCurrentState] = useState<AppState>('home');
   const [selectedCollection, setSelectedCollection] = useState<WordCollection | null>(null);
@@ -76,9 +78,21 @@ const MainApp = () => {
 
   const loadUserCollections = async () => {
     if (currentUser) {
-      const { loadUserCollections: loadUserCollectionsUtil } = await import('./utils/storage');
+      const { loadUserCollections: loadUserCollectionsUtil, getLearnedCollections } = await import('./utils/storage');
       const userCollections = await loadUserCollectionsUtil(currentUser.id);
       setCollections(userCollections);
+      
+      // Load learned words for AI Teacher context
+      try {
+        const learnedCollections = await getLearnedCollections(currentUser.id);
+        const allLearnedWords = learnedCollections.flatMap(lc => 
+          lc.embeddedData ? lc.embeddedData.words : []
+        );
+        setLearnedWords(allLearnedWords);
+      } catch (error) {
+        console.log('No learned words yet:', error);
+        setLearnedWords([]);
+      }
     }
   };
 
@@ -327,6 +341,7 @@ const MainApp = () => {
           onNavigateToAllExams={() => setCurrentState('all-exams')}
           onNavigateToMyExams={() => setCurrentState('my-exams')}
           onNavigateToSettings={() => setCurrentState('settings')}
+          onNavigateToAITeacher={() => setCurrentState('ai-teacher')}
           onTakeExam={handleTakeExam}
           onPlayQuiz={handlePlayQuiz}
         />
@@ -395,6 +410,14 @@ const MainApp = () => {
           settings={settings}
           onUpdateSettings={handleUpdateSettings}
           onBack={handleBackToHome}
+        />
+      )}
+
+      {currentState === 'ai-teacher' && (
+        <AITeacher
+          onBack={handleBackToHome}
+          userCollections={collections}
+          learnedWords={learnedWords}
         />
       )}
 

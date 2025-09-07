@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BookOpen, GraduationCap, Settings, LogOut, User, BarChart3, TrendingUp, Play, Star, Users, Trophy, CheckCircle } from 'lucide-react';
+import { BookOpen, GraduationCap, Settings, LogOut, User, BarChart3, TrendingUp, Play, Star, Users, Trophy, CheckCircle, Bot, Sparkles } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { loadTopRatedCollections, loadAllPublicExams, getGlobalStatistics, isCollectionLearned, getLearnedCollections } from '../utils/storage';
 import { WordCollection, PublicExam } from '../types';
@@ -12,6 +12,7 @@ interface HomeProps {
   onNavigateToAllExams: () => void;
   onNavigateToMyExams: () => void;
   onNavigateToSettings: () => void;
+  onNavigateToAITeacher: () => void;
   onTakeExam: (exam: PublicExam) => void;
   onPlayQuiz: (collection: WordCollection) => void;
 }
@@ -24,6 +25,7 @@ export const Home: React.FC<HomeProps> = ({
   onNavigateToAllExams,
   onNavigateToMyExams,
   onNavigateToSettings,
+  onNavigateToAITeacher,
   onTakeExam,
   onPlayQuiz
 }) => {
@@ -240,6 +242,31 @@ export const Home: React.FC<HomeProps> = ({
             </p>
             <div className="flex items-center text-purple-600 font-semibold group-hover:text-purple-700">
               <span>İmtahanlarıma get</span>
+              <svg className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </div>
+          </div>
+
+          {/* AI Teacher Card */}
+          <div 
+            onClick={onNavigateToAITeacher}
+            className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 p-8 cursor-pointer group transform hover:scale-105 relative overflow-hidden"
+          >
+            <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-purple-500/10 to-blue-500/10 rounded-full -translate-y-8 translate-x-8"></div>
+            <div className="flex items-center justify-center w-16 h-16 bg-gradient-to-r from-purple-500 to-blue-600 rounded-full mb-6 group-hover:from-purple-600 group-hover:to-blue-700 transition-all relative">
+              <Bot className="w-8 h-8 text-white" />
+              <Sparkles className="w-4 h-4 text-yellow-300 absolute -top-1 -right-1 animate-pulse" />
+            </div>
+            <h3 className="text-2xl font-bold text-gray-800 mb-3 flex items-center">
+              AI Müəllim
+              <span className="ml-2 px-2 py-1 bg-gradient-to-r from-purple-100 to-blue-100 text-purple-700 text-xs font-medium rounded-full">YENİ</span>
+            </h3>
+            <p className="text-gray-600 mb-6">
+              AI müəlliminizlə danışaraq İngilis dilinizi inkişaf etdirin!
+            </p>
+            <div className="flex items-center text-purple-600 font-semibold group-hover:text-purple-700">
+              <span>Söhbətə başla</span>
               <svg className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>

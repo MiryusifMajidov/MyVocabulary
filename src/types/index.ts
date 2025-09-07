@@ -130,3 +130,34 @@ export interface LeaderboardUser {
   joinedAt: Date;
   rank?: number;
 }
+
+// AI Teacher types
+export interface AIMessage {
+  id: string;
+  content: string;
+  sender: 'user' | 'ai';
+  timestamp: Date;
+  usedWords?: string[]; // Words that AI used in this message
+  suggestedWords?: Word[]; // New words AI suggests to learn
+  difficulty?: number; // 1-10 difficulty level
+}
+
+export interface AIConversation {
+  id: string;
+  userId: string;
+  title: string;
+  messages: AIMessage[];
+  createdAt: Date;
+  updatedAt: Date;
+  topic?: string;
+  userLevel: 'beginner' | 'intermediate' | 'advanced';
+}
+
+export interface AITeacherContext {
+  userLevel: 'beginner' | 'intermediate' | 'advanced';
+  learnedWords: Word[];
+  recentCollections: WordCollection[];
+  focusWords: string[]; // Words to emphasize in conversation
+  avoidWords: string[]; // Words too difficult for user level
+  conversationGoals: string[]; // What user wants to practice
+}
