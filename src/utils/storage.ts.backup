@@ -2,14 +2,12 @@ import {
   collection, 
   addDoc, 
   getDocs, 
-  getDoc,
   doc, 
   deleteDoc, 
   query, 
   where, 
   orderBy,
   updateDoc,
-  setDoc,
   increment,
   serverTimestamp,
   limit
@@ -171,114 +169,36 @@ export const updateCollection = async (collectionId: string, updates: Partial<Wo
 
 // Learning Progress Functions
 export const markCollectionAsLearned = async (userId: string, collectionId: string): Promise<void> => {
-  try {
-    console.log('🎓 Marking collection as learned:', { userId, collectionId });
-    
-    // First get the full collection data to embed
-    let embeddedData: WordCollection | null = null;
-    
-    // Try collections table first
-    const collectionDocRef = doc(db, 'collections', collectionId);
-    const collectionDoc = await getDoc(collectionDocRef);
-    
-    if (collectionDoc.exists()) {
-      const collectionData = collectionDoc.data();
-      embeddedData = {
-        id: collectionDoc.id,
-        ...collectionData,
-        createdAt: collectionData.createdAt.toDate()
-      } as WordCollection;
-    } else {
-      // Try public_exams table
-      const examDocRef = doc(db, 'public_exams', collectionId);
-      const examDoc = await getDoc(examDocRef);
-      
-      if (examDoc.exists()) {
-        const examData = examDoc.data();
-        embeddedData = {
-          id: examDoc.id,
-          name: examData.name,
-          description: examData.description || '',
-          words: examData.embeddedWords || [],
-          createdAt: examData.createdAt.toDate(),
-          userId: examData.userId,
-          username: examData.username,
-          visibility: 'public' as const,
-          rating: examData.rating || 0,
-          usageCount: examData.totalAttempts || 0
-        } as WordCollection;
-      }
-    }
-    
-    if (!embeddedData) {
-      console.log('⚠️ Collection not found for learning, it may have been deleted:', collectionId);
-      throw new Error(`Collection ${collectionId} not found. It may have been deleted.`);
-    }
-    
-    console.log('📦 Embedding collection data:', embeddedData.name);
-    
-    // Check if already exists
-    const q = query(
-      collection(db, 'learned_collections'),
-      where('userId', '==', userId),
-      where('collectionId', '==', collectionId)
-    );
-    
-    const querySnapshot = await getDocs(q);
-    
-    if (querySnapshot.empty) {
-      // Create new learned record
-      console.log('📝 Creating new learned record...');
-      await addDoc(collection(db, 'learned_collections'), {
-        userId,
-        collectionId,
-        learnedAt: new Date(),
-        perfectScoreCount: 1,
-        embeddedData: embeddedData
-      });
-      console.log('✅ New learned record created');
-    } else {
-      // Update existing record
-      console.log('📝 Updating existing learned record...');
-      const docRef = querySnapshot.docs[0].ref;
-      await updateDoc(docRef, {
-        perfectScoreCount: increment(1),
-        learnedAt: new Date(),
-        embeddedData: embeddedData
-      });
-      console.log('✅ Existing learned record updated');
-    }
-    
-    // Update collection usage count - ONLY if user owns the collection
-    try {
-      console.log('📈 Attempting to update collection usage count...');
-      const collectionDocRef = doc(db, 'collections', collectionId);
-      const collectionDoc = await getDoc(collectionDocRef);
-      
-      if (collectionDoc.exists()) {
-        const collectionData = collectionDoc.data();
-        console.log('🔍 Collection owner:', collectionData.userId, 'Current user:', userId);
-        
-        // Only update usage count if user owns the collection
-        if (collectionData.userId === userId) {
-          await updateDoc(collectionDocRef, {
-            usageCount: increment(1)
-          });
-          console.log('✅ Collection usage count updated');
-        } else {
-          console.log('⚠️ Skipping usage count update - user does not own collection');
-        }
-      } else {
-        console.log('⚠️ Collection document not found');
-      }
-    } catch (usageError) {
-      console.error('❌ Error updating collection usage count (non-critical):', usageError);
-      // Don't throw error - learning should still be marked even if usage count update fails
-    }
-  } catch (error) {
-    console.error('❌ Error in markCollectionAsLearned:', error);
-    throw error;
+  // Check if already exists
+  const q = query(
+    collection(db, 'learned_collections'),
+    where('userId', '==', userId),
+    where('collectionId', '==', collectionId)
+  );
+  
+  const querySnapshot = await getDocs(q);
+  
+  if (querySnapshot.empty) {
+    // Create new learned record
+    await addDoc(collection(db, 'learned_collections'), {
+      userId,
+      collectionId,
+      learnedAt: new Date(),
+      perfectScoreCount: 1
+    });
+  } else {
+    // Update existing record
+    const docRef = querySnapshot.docs[0].ref;
+    await updateDoc(docRef, {
+      perfectScoreCount: increment(1),
+      learnedAt: new Date()
+    });
   }
+  
+  // Update collection usage count
+  await updateDoc(doc(db, 'collections', collectionId), {
+    usageCount: increment(1)
+  });
 };
 
 export const isCollectionLearned = async (userId: string, collectionId: string): Promise<boolean> => {
@@ -305,101 +225,6 @@ export const getLearnedCollections = async (userId: string): Promise<LearnedColl
     ...doc.data(),
     learnedAt: doc.data().learnedAt.toDate()
   })) as LearnedCollection[];
-};
-
-// Get learned collections with embedded data (much simpler now!)
-export const getLearnedCollectionsWithData = async (userId: string): Promise<WordCollection[]> => {
-  try {
-    console.log('📚 Loading learned collections with embedded data for user:', userId);
-    
-    // Get learned collection records
-    const learnedQuery = query(
-      collection(db, 'learned_collections'),
-      where('userId', '==', userId)
-    );
-    
-    const learnedSnapshot = await getDocs(learnedQuery);
-    console.log('🔍 Found learned records:', learnedSnapshot.docs.length);
-    
-    if (learnedSnapshot.empty) {
-      return [];
-    }
-    
-    // Extract embedded collections from learned records
-    const collections: WordCollection[] = [];
-    
-    // Process each learned record
-    const processPromises = learnedSnapshot.docs.map(async (learnedDoc) => {
-      const data = learnedDoc.data();
-      
-      if (data.embeddedData) {
-        // Use the embedded data directly
-        const collection = {
-          ...data.embeddedData,
-          createdAt: data.embeddedData.createdAt.toDate ? data.embeddedData.createdAt.toDate() : data.embeddedData.createdAt
-        } as WordCollection;
-        collections.push(collection);
-        console.log(`✅ Using embedded data for collection:`, data.embeddedData.name);
-        return;
-      }
-      
-      // Fallback: No embedded data, try to find the original collection
-      console.log(`⚠️ No embedded data found for learned collection: ${data.collectionId}, trying to find original...`);
-      
-      try {
-        // First try collections table
-        const collectionDocRef = doc(db, 'collections', data.collectionId);
-        const collectionDoc = await getDoc(collectionDocRef);
-        
-        if (collectionDoc.exists()) {
-          const collectionData = collectionDoc.data();
-          const collection = {
-            id: collectionDoc.id,
-            ...collectionData,
-            createdAt: collectionData.createdAt.toDate()
-          } as WordCollection;
-          collections.push(collection);
-          console.log(`✅ Found original collection in collections table:`, collectionData.name);
-          return;
-        }
-        
-        // Try public_exams table
-        const examDocRef = doc(db, 'public_exams', data.collectionId);
-        const examDoc = await getDoc(examDocRef);
-        
-        if (examDoc.exists()) {
-          const examData = examDoc.data();
-          const collection = {
-            id: examDoc.id,
-            name: examData.name,
-            description: examData.description || '',
-            words: examData.embeddedWords || [],
-            createdAt: examData.createdAt.toDate(),
-            userId: examData.userId,
-            username: examData.username,
-            visibility: 'public' as const,
-            rating: examData.rating || 0,
-            usageCount: examData.totalAttempts || 0
-          } as WordCollection;
-          collections.push(collection);
-          console.log(`✅ Found original collection in public_exams table:`, examData.name);
-          return;
-        }
-        
-        console.log(`❌ Could not find original collection for: ${data.collectionId}`);
-      } catch (error) {
-        console.error(`❌ Error finding original collection for ${data.collectionId}:`, error);
-      }
-    });
-    
-    await Promise.all(processPromises);
-    
-    console.log('✅ Loaded learned collections with embedded data:', collections.length);
-    return collections;
-  } catch (error) {
-    console.error('❌ Error getting learned collections with embedded data:', error);
-    return [];
-  }
 };
 
 // Saved Collections Functions
@@ -692,29 +517,29 @@ export const getLeaderboardData = async (): Promise<LeaderboardUser[]> => {
       // Continue without learned data
     }
 
-    // Get exam participations for leaderboard stats
+    // Get exam results for leaderboard stats
     try {
-      const participationsQuery = query(collection(db, 'exam_participations'));
-      const participationsSnapshot = await getDocs(participationsQuery);
+      const examResultsQuery = query(collection(db, 'exam_results'));
+      const examResultsSnapshot = await getDocs(examResultsQuery);
       
-      console.log(`🎓 Found ${participationsSnapshot.docs.length} exam participations`);
+      console.log(`🎓 Found ${examResultsSnapshot.docs.length} exam results`);
       
-      for (const doc of participationsSnapshot.docs) {
-        const participationData = doc.data();
-        const userId = participationData.userId;
+      for (const doc of examResultsSnapshot.docs) {
+        const examData = doc.data();
+        const userId = examData.userId;
         
         if (userStats.has(userId)) {
           const userStat = userStats.get(userId)!;
           userStat.totalExams++;
-          userStat.totalExamScore += participationData.scorePercentage || 0;
+          userStat.totalExamScore += examData.scorePercentage || 0;
           
-          if (participationData.scorePercentage >= 100) {
+          if (examData.scorePercentage >= 100) {
             userStat.perfectExams++;
           }
         }
       }
     } catch (examError) {
-      console.error('❌ Error getting exam participations (skipping):', examError);
+      console.error('❌ Error getting exam results (skipping):', examError);
       // Continue without exam data
     }
     
@@ -798,13 +623,13 @@ export const saveSettings = (settings: any): void => {
 
 export const loadSettings = (): any => {
   const stored = localStorage.getItem(SETTINGS_KEY);
-  if (!stored) return { autoAdvance: true };
+  if (!stored) return { autoAdvance: true, darkMode: false };
   
   try {
     const parsed = JSON.parse(stored);
-    return { autoAdvance: true, ...parsed };
+    return { autoAdvance: true, darkMode: false, ...parsed };
   } catch {
-    return { autoAdvance: true };
+    return { autoAdvance: true, darkMode: false };
   }
 };
 
@@ -812,43 +637,13 @@ export const loadSettings = (): any => {
 export const savePublicExam = async (
   userId: string, 
   username: string, 
-  examSettings: ExamSettings,
-  collections: WordCollection[]
+  examSettings: ExamSettings
 ): Promise<PublicExam> => {
   if (!examSettings.name) {
     throw new Error('Name is required for exams');
   }
   
-  // Get selected collections data and combine all words
-  const selectedCollections = collections.filter(c => 
-    examSettings.selectedCollections.includes(c.id)
-  );
-  
-  if (selectedCollections.length === 0) {
-    throw new Error('Seçilmiş kolleksiyalar tapılmadı');
-  }
-  
-  // Combine all words from selected collections - INDEPENDENT of original collections
-  const allWords: Word[] = [];
-  selectedCollections.forEach(collection => {
-    collection.words.forEach(word => {
-      allWords.push({
-        id: word.id,
-        word: word.english || word.word, // Support both formats
-        english: word.english,
-        meaning: word.meaning,
-        type: word.type || 'noun'
-      });
-    });
-  });
-  
-  console.log('📚 Combined words for exam:', allWords.length, 'total words');
-  console.log('🔍 Sample words being embedded:', allWords.slice(0, 3));
-  selectedCollections.forEach((col, index) => {
-    console.log(`   ${index + 1}. ${col.name} (${col.words.length} words)`);
-  });
-  
-  // Create a clean exam object with embedded words - INDEPENDENT of original collections
+  // Create a clean exam object without functions or undefined values
   const newExam = {
     name: examSettings.name,
     description: examSettings.description || '',
@@ -863,14 +658,6 @@ export const savePublicExam = async (
       name: examSettings.name,
       description: examSettings.description
     },
-    // Store all words directly in exam - makes exam independent of collections
-    embeddedWords: allWords,
-    // Store collection metadata for reference
-    collectionsMetadata: selectedCollections.map(col => ({
-      id: col.id,
-      name: col.name,
-      wordCount: col.words.length
-    })),
     createdAt: new Date(),
     totalAttempts: 0,
     averageScore: 0,
@@ -931,87 +718,90 @@ export const savePublicExam = async (
 };
 
 export const loadAllPublicExams = async (limitCount: number = 50): Promise<PublicExam[]> => {
-  console.log('🔍 Starting to load all public exams...');
+  console.log('🔍 Starting to load ALL exams (no filtering)...');
   
-  try {
-    // Load ALL exams from public_exams collection (temporarily no isPublic filtering)
-    const q = query(
-      collection(db, 'public_exams'),
-      orderBy('createdAt', 'desc'),
-      limit(limitCount)
-    );
-    
-    console.log('🔍 Query created for public_exams collection');
-    const querySnapshot = await getDocs(q);
-    console.log('📊 Query executed. Found docs:', querySnapshot.docs.length);
-    
-    if (querySnapshot.docs.length > 0) {
-      querySnapshot.docs.forEach((doc, index) => {
-        const data = doc.data();
-        console.log(`📋 Exam ${index + 1}:`, {
-          id: doc.id,
-          name: data.name,
-          isPublic: data.settings?.isPublic,
-          userId: data.userId,
-          username: data.username
-        });
-      });
+  // TEMPORARY: Return mock data to test UI
+  const mockExams: PublicExam[] = [
+    {
+      id: 'mock-1',
+      name: 'Test İmtahanı 1',
+      description: 'Test üçün yaradılmış imtahan',
+      userId: 'mock-user',
+      username: 'Test User',
+      settings: {
+        selectedCollections: ['mock-collection'],
+        variantCount: 4,
+        wordCount: 20,
+        timeLimit: 10,
+        isPublic: true,
+        name: 'Test İmtahanı 1',
+        description: 'Test üçün yaradılmış imtahan'
+      },
+      createdAt: new Date(),
+      totalAttempts: 5,
+      averageScore: 85.5,
+      rating: 4.5
+    },
+    {
+      id: 'mock-2',
+      name: 'Test İmtahanı 2',
+      description: 'İkinci test imtahanı',
+      userId: 'mock-user-2',
+      username: 'Test User 2',
+      settings: {
+        selectedCollections: ['mock-collection'],
+        variantCount: 4,
+        wordCount: 15,
+        timeLimit: 15,
+        isPublic: true,
+        name: 'Test İmtahanı 2',
+        description: 'İkinci test imtahanı'
+      },
+      createdAt: new Date(),
+      totalAttempts: 12,
+      averageScore: 78.2,
+      rating: 4.2
     }
-    
-    let exams = querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      createdAt: doc.data().createdAt.toDate()
-    })) as PublicExam[];
-    
-    // Load stats for each exam
-    const examsWithStats = await Promise.all(
-      exams.map(async (exam) => {
-        const stats = await getExamStats(exam.id);
-        return {
-          ...exam,
-          totalAttempts: stats.totalAttempts || 0,
-          averageScore: stats.averageScore || 0
-        };
-      })
-    );
-    
-    console.log('🔍 Loaded public exams with embedded words check:');
-    examsWithStats.forEach((exam, index) => {
-      console.log(`   ${index + 1}. ${exam.name} - embeddedWords: ${exam.embeddedWords ? exam.embeddedWords.length : 'NONE'} - attempts: ${exam.totalAttempts} - avg: ${exam.averageScore.toFixed(1)}%`);
-    });
-    
-    return examsWithStats;
-  } catch (error) {
-    console.log('❌ Error in loadAllPublicExams:', error);
-    console.log('⚠️ Failed to load from public_exams, trying collections instead...');
-    
-    // Alternative approach - load from collections with public exam flag
-    const q = query(
-      collection(db, 'collections'),
-      where('isPublicExam', '==', true),
-      limit(limitCount)
-    );
-    
-    const querySnapshot = await getDocs(q);
-    console.log('📊 Loaded public exams from collections:', querySnapshot.docs.length);
-    
-    return querySnapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      createdAt: doc.data().createdAt.toDate()
-    })) as PublicExam[];
-  }
+  ];
+  
+  console.log('🎭 Returning mock data:', mockExams.length, 'exams');
+  return mockExams;
 };
 
 export const loadUserPublicExams = async (userId: string): Promise<PublicExam[]> => {
   console.log('🔍 Loading user exams for userId:', userId);
   
-  try {
-    // Try loading from public_exams collection first - simplified query
+  // TEMPORARY: Return mock data to test UI
+  const mockUserExams: PublicExam[] = [
+    {
+      id: 'user-exam-1',
+      name: 'Mənim İmtahanım',
+      description: 'Test üçün yaradılmış mənim imtahanım',
+      userId: userId,
+      username: 'Current User',
+      settings: {
+        selectedCollections: ['mock-collection'],
+        variantCount: 4,
+        wordCount: 25,
+        timeLimit: 20,
+        isPublic: true,
+        name: 'Mənim İmtahanım',
+        description: 'Test üçün yaradılmış mənim imtahanım'
+      },
+      createdAt: new Date(),
+      totalAttempts: 3,
+      averageScore: 92.1,
+      rating: 4.8
+    }
+  ];
+  
+  console.log('🎭 Returning mock user data:', mockUserExams.length, 'exams');
+  return mockUserExams;
+    // Try loading from public_exams collection first
     const q = query(
       collection(db, 'public_exams'),
-      where('userId', '==', userId)
+      where('userId', '==', userId),
+      orderBy('createdAt', 'desc')
     );
     
     const querySnapshot = await getDocs(q);
@@ -1035,78 +825,49 @@ export const loadUserPublicExams = async (userId: string): Promise<PublicExam[]>
       createdAt: doc.data().createdAt.toDate()
     })) as PublicExam[];
   } catch (error) {
-    console.log('❌ Error in loadUserPublicExams:', error);
-    throw error; // Re-throw error to see what's actually wrong
+    console.log('⚠️ Failed to load user exams from public_exams, trying collections...');
+    
+    // Alternative approach - load from collections with public exam flag
+    const q = query(
+      collection(db, 'collections'),
+      where('userId', '==', userId),
+      where('isPublicExam', '==', true)
+    );
+    
+    const querySnapshot = await getDocs(q);
+    console.log('📊 Loaded user public exams from collections:', querySnapshot.docs.length);
+    
+    return querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+      createdAt: doc.data().createdAt.toDate()
+    })) as PublicExam[];
   }
 };
 
 export const updateExamStats = async (examId: string, score: number, totalQuestions: number) => {
   try {
-    const statsRef = doc(db, 'exam_stats', examId);
-    const newScore = (score / totalQuestions) * 100;
+    // Try updating in public_exams first
+    const examRef = doc(db, 'public_exams', examId);
+    await updateDoc(examRef, {
+      totalAttempts: increment(1),
+      averageScore: score / totalQuestions * 100
+    });
+    console.log('✅ Exam stats updated in public_exams:', examId);
+  } catch (error) {
+    console.log('⚠️ Failed to update in public_exams, trying collections...');
     
-    // Get current stats
-    const statsDoc = await getDoc(statsRef);
-    
-    if (statsDoc.exists()) {
-      const currentData = statsDoc.data();
-      const currentAttempts = currentData.totalAttempts || 0;
-      const currentAverage = currentData.averageScore || 0;
-      
-      // Calculate new average: ((old_average * old_attempts) + new_score) / (old_attempts + 1)
-      const newAverage = currentAttempts === 0 
-        ? newScore 
-        : ((currentAverage * currentAttempts) + newScore) / (currentAttempts + 1);
-      
-      await updateDoc(statsRef, {
+    try {
+      // Try updating in collections instead
+      const examRef = doc(db, 'collections', examId);
+      await updateDoc(examRef, {
         totalAttempts: increment(1),
-        averageScore: newAverage,
-        lastUpdated: new Date()
+        averageScore: score / totalQuestions * 100
       });
-      
-      console.log('✅ Exam stats updated:', examId, {
-        newAttempts: currentAttempts + 1,
-        newAverage: newAverage.toFixed(1)
-      });
-    } else {
-      // Create new stats document
-      await setDoc(statsRef, {
-        examId,
-        totalAttempts: 1,
-        averageScore: newScore,
-        createdAt: new Date(),
-        lastUpdated: new Date()
-      });
-      
-      console.log('✅ New exam stats created:', examId, {
-        totalAttempts: 1,
-        averageScore: newScore.toFixed(1)
-      });
+      console.log('✅ Exam stats updated in collections:', examId);
+    } catch (error) {
+      console.error('❌ Error updating exam stats in both tables:', error);
     }
-  } catch (error) {
-    console.error('❌ Error updating exam stats:', error);
-  }
-};
-
-// Get exam statistics
-export const getExamStats = async (examId: string) => {
-  try {
-    const statsDoc = await getDoc(doc(db, 'exam_stats', examId));
-    
-    if (statsDoc.exists()) {
-      return statsDoc.data();
-    }
-    
-    return {
-      totalAttempts: 0,
-      averageScore: 0
-    };
-  } catch (error) {
-    console.error('❌ Error getting exam stats:', error);
-    return {
-      totalAttempts: 0,
-      averageScore: 0
-    };
   }
 };
 
@@ -1158,7 +919,32 @@ export const trackExamParticipation = async (
 export const loadUserParticipatedExams = async (userId: string): Promise<PublicExam[]> => {
   console.log('🔍 Loading participated exams for userId:', userId);
   
-  try {
+  // TEMPORARY: Return mock data to test UI
+  const mockParticipatedExams: PublicExam[] = [
+    {
+      id: 'participated-exam-1',
+      name: 'İştirak Etdiyim İmtahan',
+      description: 'Başqa user tərəfindən yaradılmış imtahan',
+      userId: 'other-user',
+      username: 'Other User',
+      settings: {
+        selectedCollections: ['mock-collection'],
+        variantCount: 4,
+        wordCount: 30,
+        timeLimit: 15,
+        isPublic: true,
+        name: 'İştirak Etdiyim İmtahan',
+        description: 'Başqa user tərəfindən yaradılmış imtahan'
+      },
+      createdAt: new Date(),
+      totalAttempts: 15,
+      averageScore: 82.3,
+      rating: 4.1
+    }
+  ];
+  
+  console.log('🎭 Returning mock participated data:', mockParticipatedExams.length, 'exams');
+  return mockParticipatedExams;
     // First get all exam participations for this user
     const participationsQuery = query(
       collection(db, 'exam_participations'),
@@ -1175,16 +961,12 @@ export const loadUserParticipatedExams = async (userId: string): Promise<PublicE
     
     // Then get the exam details for these IDs
     const examPromises = examIds.map(async examId => {
-      const examDoc = await getDocs(query(
-        collection(db, 'public_exams'),
-        where('__name__', '==', examId)
-      ));
-      if (!examDoc.empty) {
-        const examData = examDoc.docs[0];
+      const examDoc = await getDoc(doc(db, 'public_exams', examId));
+      if (examDoc.exists()) {
         return {
-          id: examData.id,
-          ...examData.data(),
-          createdAt: examData.data().createdAt.toDate()
+          id: examDoc.id,
+          ...examDoc.data(),
+          createdAt: examDoc.data().createdAt.toDate()
         } as PublicExam;
       }
       return null;
@@ -1218,238 +1000,5 @@ export const getUserExamResults = async (userId: string, examId: string) => {
   } catch (error) {
     console.error('Error loading user exam results:', error);
     return [];
-  }
-};
-
-// Check if user has participated in an exam
-export const hasUserParticipatedInExam = async (userId: string, examId: string): Promise<boolean> => {
-  try {
-    const resultsQuery = query(
-      collection(db, 'exam_participations'),
-      where('userId', '==', userId),
-      where('examId', '==', examId),
-      limit(1)
-    );
-    
-    const snapshot = await getDocs(resultsQuery);
-    return snapshot.docs.length > 0;
-  } catch (error) {
-    console.error('Error checking user participation:', error);
-    return false;
-  }
-};
-
-// Get user's best result for an exam
-export const getUserBestExamResult = async (userId: string, examId: string) => {
-  try {
-    const resultsQuery = query(
-      collection(db, 'exam_participations'),
-      where('userId', '==', userId),
-      where('examId', '==', examId),
-      orderBy('scorePercentage', 'desc'),
-      limit(1)
-    );
-    
-    const snapshot = await getDocs(resultsQuery);
-    if (snapshot.docs.length > 0) {
-      return {
-        ...snapshot.docs[0].data(),
-        participatedAt: snapshot.docs[0].data().participatedAt.toDate()
-      };
-    }
-    return null;
-  } catch (error) {
-    console.error('Error loading user best exam result:', error);
-    return null;
-  }
-};
-
-// MIGRATION: Update old exams to have embedded words
-export const migrateOldExamsToEmbedWords = async () => {
-  console.log('🔄 Starting migration of old exams to embedded words format...');
-  
-  try {
-    // Get all public exams
-    const examsQuery = query(collection(db, 'public_exams'));
-    const examsSnapshot = await getDocs(examsQuery);
-    
-    let migratedCount = 0;
-    
-    for (const examDoc of examsSnapshot.docs) {
-      const examData = examDoc.data() as PublicExam;
-      
-      // Check if exam already has embedded words
-      if (examData.embeddedWords && examData.embeddedWords.length > 0) {
-        console.log(`✅ Exam ${examData.name} already has embedded words, skipping...`);
-        continue;
-      }
-      
-      console.log(`🔄 Migrating exam: ${examData.name}`);
-      
-      // Try to get collections for this exam
-      if (examData.settings?.selectedCollections?.length > 0) {
-        try {
-          const collectionsToEmbed = [];
-          
-          // Get each collection
-          for (const collectionId of examData.settings.selectedCollections) {
-            const collectionDoc = await getDocs(query(
-              collection(db, 'collections'),
-              where('__name__', '==', collectionId)
-            ));
-            
-            if (collectionDoc.docs.length > 0) {
-              collectionsToEmbed.push(collectionDoc.docs[0].data());
-            }
-          }
-          
-          if (collectionsToEmbed.length > 0) {
-            // Create embedded words
-            const embeddedWords: any[] = [];
-            collectionsToEmbed.forEach((col: any) => {
-              if (col.words && Array.isArray(col.words)) {
-                col.words.forEach((word: any) => {
-                  embeddedWords.push({
-                    id: word.id,
-                    word: word.english || word.word,
-                    english: word.english,
-                    meaning: word.meaning,
-                    type: word.type || 'noun'
-                  });
-                });
-              }
-            });
-            
-            // Update exam with embedded words
-            const examRef = doc(db, 'public_exams', examDoc.id);
-            await updateDoc(examRef, {
-              embeddedWords: embeddedWords,
-              collectionsMetadata: collectionsToEmbed.map((col: any) => ({
-                id: col.id,
-                name: col.name,
-                wordCount: col.words?.length || 0
-              }))
-            });
-            
-            console.log(`✅ Migrated exam ${examData.name} with ${embeddedWords.length} words`);
-            migratedCount++;
-          } else {
-            console.log(`⚠️ No collections found for exam ${examData.name}`);
-          }
-        } catch (error) {
-          console.error(`❌ Error migrating exam ${examData.name}:`, error);
-        }
-      } else {
-        console.log(`⚠️ Exam ${examData.name} has no selected collections`);
-      }
-    }
-    
-    console.log(`🎉 Migration completed! Migrated ${migratedCount} exams.`);
-    return { success: true, migratedCount };
-  } catch (error) {
-    console.error('❌ Migration failed:', error);
-    return { success: false, error };
-  }
-};
-
-// Global statistics functions
-export const getGlobalStatistics = async () => {
-  try {
-    console.log('📊 Loading global statistics...');
-    
-    // Get ALL collections count (both public and private)
-    const collectionsQuery = query(collection(db, 'collections'));
-    const collectionsSnapshot = await getDocs(collectionsQuery);
-    const totalCollections = collectionsSnapshot.size;
-    console.log('🔍 Total collections found:', totalCollections);
-
-    // Get total exams count
-    const examsQuery = query(collection(db, 'public_exams'));
-    const examsSnapshot = await getDocs(examsQuery);
-    const totalExams = examsSnapshot.size;
-    console.log('🔍 Total exams found:', totalExams);
-
-    // Get total users count from users table
-    const usersQuery = query(collection(db, 'users'));
-    const usersSnapshot = await getDocs(usersQuery);
-    const totalUsers = usersSnapshot.size;
-    console.log('🔍 Total users found:', totalUsers);
-
-    // Get total words count from ALL collections
-    let totalWords = 0;
-    let totalLearnedWords = 0;
-    
-    // Count words from regular collections
-    collectionsSnapshot.forEach(doc => {
-      const data = doc.data();
-      if (data.words && Array.isArray(data.words)) {
-        totalWords += data.words.length;
-      }
-    });
-    
-    // Count words from public exams (embeddedWords)
-    examsSnapshot.forEach(doc => {
-      const data = doc.data();
-      if (data.embeddedWords && Array.isArray(data.embeddedWords)) {
-        totalWords += data.embeddedWords.length;
-      }
-    });
-    
-    console.log('🔍 Total words found:', totalWords);
-
-    // Count learned words from all learned collections
-    const learnedQuery = query(collection(db, 'learned_collections'));
-    const learnedSnapshot = await getDocs(learnedQuery);
-    
-    console.log('🔍 Total learned records found:', learnedSnapshot.size);
-    
-    learnedSnapshot.forEach(learnedDoc => {
-      const learnedData = learnedDoc.data();
-      
-      if (learnedData.embeddedData && learnedData.embeddedData.words) {
-        // Use embedded data if available
-        totalLearnedWords += learnedData.embeddedData.words.length;
-      } else {
-        // Fallback: find the original collection
-        const collectionId = learnedData.collectionId;
-        
-        // Check in collections
-        const foundInCollections = collectionsSnapshot.docs.find(doc => doc.id === collectionId);
-        if (foundInCollections) {
-          const collData = foundInCollections.data();
-          if (collData.words) {
-            totalLearnedWords += collData.words.length;
-          }
-        } else {
-          // Check in exams
-          const foundInExams = examsSnapshot.docs.find(doc => doc.id === collectionId);
-          if (foundInExams) {
-            const examData = foundInExams.data();
-            if (examData.embeddedWords) {
-              totalLearnedWords += examData.embeddedWords.length;
-            }
-          }
-        }
-      }
-    });
-    
-    console.log('🔍 Total learned words found:', totalLearnedWords);
-
-    return {
-      totalCollections,
-      totalExams,
-      totalUsers,
-      totalWords,
-      totalLearnedWords
-    };
-  } catch (error) {
-    console.error('Error getting global statistics:', error);
-    return {
-      totalCollections: 0,
-      totalExams: 0,
-      totalUsers: 0,
-      totalWords: 0,
-      totalLearnedWords: 0
-    };
   }
 };

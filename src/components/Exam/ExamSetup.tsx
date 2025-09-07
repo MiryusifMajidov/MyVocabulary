@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, GraduationCap, CheckCircle, Settings, Clock, Users, FileText } from 'lucide-react';
+import { ArrowLeft, GraduationCap, CheckCircle, Settings, Clock, Users, FileText, BookOpen } from 'lucide-react';
 import { WordCollection, ExamSettings } from '../../types';
 
 interface ExamSetupProps {
@@ -45,7 +45,11 @@ export const ExamSetup: React.FC<ExamSetupProps> = ({
 
   const handleStartExam = () => {
     if (selectedCollections.length === 0) return;
-    if (isPublic && !examName.trim()) return;
+    
+    // Auto-generate name if not provided for public exams
+    const finalName = isPublic && !examName.trim() 
+      ? `İmtahan ${new Date().toLocaleString('az-AZ')}` 
+      : examName;
     
     const examSettings: ExamSettings = {
       selectedCollections,
@@ -53,7 +57,7 @@ export const ExamSetup: React.FC<ExamSetupProps> = ({
       wordCount,
       timeLimit,
       isPublic,
-      name: isPublic ? examName : undefined,
+      name: isPublic ? finalName : undefined,
       description: isPublic ? examDescription : undefined
     };
     
@@ -97,32 +101,56 @@ export const ExamSetup: React.FC<ExamSetupProps> = ({
           </div>
           
           <div className="space-y-3 max-h-80 overflow-y-auto">
-            {collections.map((collection) => (
-              <div
-                key={collection.id}
-                className="flex items-center space-x-3 p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer"
-                onClick={() => handleCollectionToggle(collection.id)}
-              >
-                <div className="relative">
-                  <input
-                    type="checkbox"
-                    checked={selectedCollections.includes(collection.id)}
-                    onChange={(e) => {
-                      e.stopPropagation();
-                      handleCollectionToggle(collection.id);
-                    }}
-                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                  />
-                  {selectedCollections.includes(collection.id) && (
-                    <CheckCircle className="w-4 h-4 text-green-600 absolute -top-1 -right-1" />
+            {collections.map((collection) => {
+              const isSelected = selectedCollections.includes(collection.id);
+              return (
+                <div
+                  key={collection.id}
+                  className={`flex items-center space-x-4 p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
+                    isSelected 
+                      ? 'border-blue-500 bg-blue-50 shadow-md' 
+                      : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                  }`}
+                  onClick={() => handleCollectionToggle(collection.id)}
+                >
+                  {/* Custom Checkbox */}
+                  <div className="flex-shrink-0">
+                    <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${
+                      isSelected 
+                        ? 'bg-blue-500 border-blue-500' 
+                        : 'border-gray-300 bg-white'
+                    }`}>
+                      {isSelected && (
+                        <CheckCircle className="w-3 h-3 text-white" />
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Collection Info */}
+                  <div className="flex-1 min-w-0">
+                    <h3 className={`font-medium truncate ${
+                      isSelected ? 'text-blue-800' : 'text-gray-800'
+                    }`}>
+                      {collection.name}
+                    </h3>
+                    <div className="flex items-center space-x-2 text-sm text-gray-600">
+                      <BookOpen className="w-3 h-3" />
+                      <span>{collection.words?.length || 0} söz</span>
+                      {collection.visibility === 'public' && (
+                        <span className="text-green-600 text-xs">• Public</span>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Selection Status */}
+                  {isSelected && (
+                    <div className="flex-shrink-0">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                    </div>
                   )}
                 </div>
-                <div className="flex-1">
-                  <h3 className="font-medium text-gray-800">{collection.name}</h3>
-                  <p className="text-sm text-gray-600">{collection.words?.length || 0} söz</p>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
           
           <div className="mt-4 p-3 bg-blue-50 rounded-lg">

@@ -5,6 +5,7 @@ import { Home } from './components/Home';
 import { MyCollections } from './components/MyCollections';
 import { AllCollections } from './components/AllCollections';
 import { AllExams } from './components/AllExams';
+import { MyExams } from './components/MyExams';
 import { Leaderboard } from './components/Leaderboard';
 import { Quiz } from './components/Quiz';
 import { QuizResult as QuizResultComponent } from './components/QuizResult';
@@ -12,12 +13,14 @@ import { Settings } from './components/Settings';
 import { Login } from './components/Auth/Login';
 import { Register } from './components/Auth/Register';
 import { ExamSetup } from './components/Exam/ExamSetup';
+import { ConfirmDialog } from './components/ui/ConfirmDialog';
+import { QuizModeSelector } from './components/QuizModeSelector';
 import { ProfessionalExam } from './components/Exam/ProfessionalExam';
 import { ExamResult } from './components/Exam/ExamResult';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { ExamSettings, PublicExam } from './types';
+import { ExamSettings, PublicExam, QuizMode } from './types';
 
-type AppState = 'home' | 'collections' | 'all-collections' | 'all-exams' | 'leaderboard' | 'quiz' | 'result' | 'settings' | 'exam' | 'exam-active' | 'exam-result';
+type AppState = 'home' | 'collections' | 'all-collections' | 'all-exams' | 'my-exams' | 'leaderboard' | 'quiz' | 'result' | 'settings' | 'exam' | 'exam-active' | 'exam-result';
 type AuthState = 'login' | 'register';
 
 const AppContent = () => {
@@ -36,12 +39,35 @@ const AppContent = () => {
 const MainApp = () => {
   const { currentUser } = useAuth();
   const [collections, setCollections] = useState<WordCollection[]>([]);
-  const [settings, setAppSettings] = useState<AppSettings>({ autoAdvance: true, darkMode: false });
+  const [settings, setAppSettings] = useState<AppSettings>({ autoAdvance: true, quizMode: 'english-to-meaning' });
   const [currentState, setCurrentState] = useState<AppState>('home');
   const [selectedCollection, setSelectedCollection] = useState<WordCollection | null>(null);
+  const [showQuizModeSelector, setShowQuizModeSelector] = useState(false);
   const [quizResult, setQuizResult] = useState<QuizResult | null>(null);
   const [examSettings, setExamSettings] = useState<ExamSettings | null>(null);
+  const [currentPublicExam, setCurrentPublicExam] = useState<PublicExam | null>(null);
   const [examResult, setExamResult] = useState<{score: number, total: number, timeSpent: number, timeLimit: number} | null>(null);
+  
+  // Confirm dialog state
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    bestScore?: number;
+    totalAttempts?: number;
+    recentResults?: Array<{
+      scorePercentage: number;
+      participatedAt: Date | string;
+      score: number;
+      totalQuestions: number;
+    }>;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {}
+  });
 
   useEffect(() => {
     loadUserCollections();
@@ -72,6 +98,12 @@ const MainApp = () => {
 
   const handlePlayQuiz = (collection: WordCollection) => {
     setSelectedCollection(collection);
+    setShowQuizModeSelector(true);
+  };
+
+  const handleSelectQuizMode = (mode: QuizMode) => {
+    setAppSettings(prev => ({ ...prev, quizMode: mode }));
+    setShowQuizModeSelector(false);
     setCurrentState('quiz');
   };
 
@@ -95,20 +127,32 @@ const MainApp = () => {
     setSelectedCollection(null);
     setQuizResult(null);
     setExamSettings(null);
+    setCurrentPublicExam(null);
     setExamResult(null);
   };
 
   const handleStartExam = async (settings: ExamSettings) => {
-    // First, save public exam to database if it's marked as public
+    // Save exam to database (both public and private exams should be saved)
     let savedPublicExamId = null;
-    if (settings.isPublic && currentUser && settings.name) {
+    if (currentUser) {
       try {
         const { savePublicExam } = await import('./utils/storage');
-        const savedExam = await savePublicExam(currentUser.id, currentUser.username, settings);
+        // Generate a name for private exams if not provided
+        const examName = settings.name || `İmtahan ${new Date().toLocaleString('az-AZ')}`;
+        const examSettings = {
+          ...settings,
+          name: examName
+        };
+        const savedExam = await savePublicExam(currentUser.id, currentUser.username, examSettings, collections);
         savedPublicExamId = savedExam.id;
-        console.log('✅ Public exam saved to database:', savedExam.id);
+        console.log('✅ Exam saved to database:', savedExam.id, settings.isPublic ? '(Public)' : '(Private)');
+        console.log('🔍 DEBUG: Saved exam details:', {
+          savedExamId: savedExam.id,
+          embeddedWords: savedExam.embeddedWords?.length || 0,
+          collectionsUsed: collections.length
+        });
       } catch (error) {
-        console.error('❌ Error saving public exam:', error);
+        console.error('❌ Error saving exam:', error);
         // Don't prevent exam start if saving fails
       }
     }
@@ -127,20 +171,37 @@ const MainApp = () => {
     // Save exam result for leaderboard stats
     if (currentUser) {
       try {
-        const { saveExamResult } = await import('./utils/storage');
+        const { saveExamResult, trackExamParticipation } = await import('./utils/storage');
         await saveExamResult(currentUser.id, score, totalQuestions, timeSpent, examSettings);
         console.log('✅ Exam result saved for user:', currentUser.id);
+        
+        // Track participation for ANY public exam (both created and taken by user)
+        const examIdToTrack = examSettings?.publicExamId || currentPublicExam?.id;
+        console.log('🔍 DEBUG: Tracking participation:', {
+          publicExamId: examSettings?.publicExamId,
+          currentPublicExamId: currentPublicExam?.id,
+          examIdToTrack,
+          userId: currentUser.id
+        });
+        
+        if (examIdToTrack) {
+          await trackExamParticipation(currentUser.id, examIdToTrack, score, totalQuestions, timeSpent);
+          console.log('✅ Exam participation tracked for exam:', examIdToTrack);
+        } else {
+          console.log('⚠️ No exam ID to track participation for!');
+        }
       } catch (error) {
         console.error('❌ Error saving exam result:', error);
       }
     }
 
     // Update public exam stats if this was a public exam attempt
-    if (examSettings?.publicExamId) {
+    const examIdToUpdate = examSettings?.publicExamId || currentPublicExam?.id;
+    if (examIdToUpdate) {
       try {
         const { updateExamStats } = await import('./utils/storage');
-        await updateExamStats(examSettings.publicExamId, score, totalQuestions);
-        console.log('✅ Public exam stats updated:', examSettings.publicExamId);
+        await updateExamStats(examIdToUpdate, score, totalQuestions);
+        console.log('✅ Public exam stats updated:', examIdToUpdate);
       } catch (error) {
         console.error('❌ Error updating exam stats:', error);
       }
@@ -189,6 +250,44 @@ const MainApp = () => {
   };
 
   const handleTakeExam = async (publicExam: PublicExam) => {
+    // Check if user has previous results for this exam
+    if (currentUser) {
+      try {
+        const { getUserExamResults } = await import('./utils/storage');
+        const previousResults = await getUserExamResults(currentUser.id, publicExam.id);
+        
+        if (previousResults.length > 0) {
+          // Show custom confirm dialog
+          setConfirmDialog({
+            isOpen: true,
+            title: 'Bu imtahanda əvvəllər iştirak etmisiniz!',
+            message: 'Yenidən cəhd etmək istəyirsiniz?',
+            bestScore: previousResults[0].scorePercentage,
+            totalAttempts: previousResults.length,
+            recentResults: previousResults.slice(0, 3).map(result => ({
+              scorePercentage: result.scorePercentage,
+              participatedAt: result.participatedAt,
+              score: result.score,
+              totalQuestions: result.totalQuestions
+            })),
+            onConfirm: () => {
+              setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+              // Continue with exam
+              continueWithExam(publicExam);
+            }
+          });
+          return;
+        }
+      } catch (error) {
+        console.error('❌ Error checking previous results:', error);
+      }
+    }
+
+    continueWithExam(publicExam);
+  };
+
+  const continueWithExam = async (publicExam: PublicExam) => {
+
     // Convert public exam to exam settings and start
     const examSettings: ExamSettings = {
       ...publicExam.settings,
@@ -204,12 +303,21 @@ const MainApp = () => {
     }
     
     console.log('🚀 Starting public exam:', publicExam.name, 'ID:', publicExam.id);
+    console.log('🔍 DEBUG: Taking public exam:', {
+      examId: publicExam.id,
+      examName: publicExam.name,
+      hasEmbeddedWords: !!publicExam.embeddedWords,
+      embeddedWordsCount: publicExam.embeddedWords?.length || 0,
+      examSettingsPublicExamId: examSettings.publicExamId
+    });
+    
     setExamSettings(examSettings);
+    setCurrentPublicExam(publicExam); // Store public exam data for ProfessionalExam
     setCurrentState('exam-active');
   };
 
   return (
-    <div className={`min-h-screen ${settings.darkMode ? 'dark bg-gray-900' : ''}`}>
+    <div className="min-h-screen">
       {currentState === 'home' && (
         <Home
           onNavigateToCollections={() => setCurrentState('collections')}
@@ -217,7 +325,10 @@ const MainApp = () => {
           onNavigateToLeaderboard={() => setCurrentState('leaderboard')}
           onNavigateToExam={handleNavigateToExam}
           onNavigateToAllExams={() => setCurrentState('all-exams')}
+          onNavigateToMyExams={() => setCurrentState('my-exams')}
           onNavigateToSettings={() => setCurrentState('settings')}
+          onTakeExam={handleTakeExam}
+          onPlayQuiz={handlePlayQuiz}
         />
       )}
 
@@ -239,8 +350,17 @@ const MainApp = () => {
 
       {currentState === 'all-exams' && (
         <AllExams
+          onBack={() => setCurrentState('my-exams')}
+          onTakeExam={handleTakeExam}
+        />
+      )}
+
+      {currentState === 'my-exams' && (
+        <MyExams
           onBack={handleBackToHome}
           onTakeExam={handleTakeExam}
+          onNavigateToAllExams={() => setCurrentState('all-exams')}
+          onNavigateToCreateExam={handleNavigateToExam}
         />
       )}
 
@@ -254,6 +374,7 @@ const MainApp = () => {
         <Quiz
           collection={selectedCollection}
           autoAdvance={settings.autoAdvance}
+          quizMode={settings.quizMode}
           onBack={() => setCurrentState('collections')}
           onFinish={handleQuizFinish}
         />
@@ -289,6 +410,7 @@ const MainApp = () => {
         <ProfessionalExam
           collections={collections}
           examSettings={examSettings}
+          publicExam={currentPublicExam}
           onFinish={handleExamFinish}
           onBack={() => setCurrentState('exam')}
         />
@@ -304,6 +426,26 @@ const MainApp = () => {
           onBackToHome={handleBackToHome}
         />
       )}
+
+      {/* Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        onClose={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={confirmDialog.onConfirm}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        bestScore={confirmDialog.bestScore}
+        totalAttempts={confirmDialog.totalAttempts}
+        recentResults={confirmDialog.recentResults}
+      />
+
+      {/* Quiz Mode Selector */}
+      <QuizModeSelector
+        isOpen={showQuizModeSelector}
+        onClose={() => setShowQuizModeSelector(false)}
+        onSelectMode={handleSelectQuizMode}
+        currentMode={settings.quizMode}
+      />
     </div>
   );
 };

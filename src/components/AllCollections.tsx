@@ -110,10 +110,8 @@ export const AllCollections: React.FC<AllCollectionsProps> = ({
   };
 
   const handlePlayQuiz = async (collection: WordCollection) => {
-    if (currentUser) {
-      // Update collection rating/usage when played
-      await updateCollectionRating(collection.id);
-    }
+    // Remove rating update due to permissions - only owner can update their collections
+    // Usage tracking will be handled differently in the future
     onPlayQuiz(collection);
   };
 
@@ -132,52 +130,53 @@ export const AllCollections: React.FC<AllCollectionsProps> = ({
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
       {/* Header */}
       <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
+          {/* Top Row - Title and Back Button */}
+          <div className="flex items-center justify-between mb-4 sm:mb-0">
+            <div className="flex items-center space-x-3 sm:space-x-4">
               <button
                 onClick={onBack}
                 className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 <ArrowLeft className="w-5 h-5 text-gray-600" />
               </button>
-              <div className="flex items-center space-x-3">
+              <div className="flex items-center space-x-2 sm:space-x-3">
                 <div className="p-2 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg">
-                  <BookOpen className="w-6 h-6 text-white" />
+                  <BookOpen className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
                 </div>
-                <h1 className="text-2xl font-bold text-gray-800">Bütün Kolleksiyalar</h1>
+                <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Bütün Kolleksiyalar</h1>
               </div>
+            </div>
+          </div>
+          
+          {/* Bottom Row - Search and Filters */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end space-y-3 sm:space-y-0 sm:space-x-4">
+            <div className="relative flex-1 sm:flex-initial">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Kolleksiya və ya müəllif axtar..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full sm:w-64 pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
             </div>
             
-            {/* Search and Filters */}
-            <div className="flex items-center space-x-4">
-              <div className="relative">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Kolleksiya və ya müəllif axtar..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-64"
-                />
-              </div>
-              
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as 'rating' | 'recent' | 'usage')}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="rating">Reytinqə görə</option>
-                <option value="recent">Yenilərə görə</option>
-                <option value="usage">İstifadəyə görə</option>
-              </select>
-            </div>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as 'rating' | 'recent' | 'usage')}
+              className="w-full sm:w-auto px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="rating">Reytinqə görə</option>
+              <option value="recent">Yenilərə görə</option>
+              <option value="usage">İstifadəyə görə</option>
+            </select>
           </div>
         </div>
       </div>
 
       {/* Content */}
-      <div className="max-w-7xl mx-auto px-6 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         {/* Stats */}
         <div className="grid md:grid-cols-3 gap-6 mb-8">
           <div className="bg-white rounded-xl shadow-lg p-6">

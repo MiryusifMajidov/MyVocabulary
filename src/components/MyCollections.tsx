@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Plus, BookOpen, Play, Trash2, Edit3, CheckCircle, Clock, Bookmark } from 'lucide-react';
 import { WordCollection } from '../types';
 import { useAuth } from '../contexts/AuthContext';
-import { loadUserCollections, loadSavedCollections, deleteCollection, getLearnedCollections, isCollectionLearned, updateCollection } from '../utils/storage';
+import { loadUserCollections, loadSavedCollections, deleteCollection, getLearnedCollections, getLearnedCollectionsWithData, isCollectionLearned, updateCollection } from '../utils/storage';
 import { CreateCollection } from './CreateCollection';
 
 interface MyCollectionsProps {
@@ -21,6 +21,7 @@ export const MyCollections: React.FC<MyCollectionsProps> = ({
   const { currentUser } = useAuth();
   const [ownCollections, setOwnCollections] = useState<WordCollection[]>([]);
   const [savedCollections, setSavedCollections] = useState<WordCollection[]>([]);
+  const [learnedCollections, setLearnedCollections] = useState<WordCollection[]>([]);
   const [learnedCollectionIds, setLearnedCollectionIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -39,19 +40,31 @@ export const MyCollections: React.FC<MyCollectionsProps> = ({
     if (currentUser) {
       setLoading(true);
       try {
-        // Load own collections, saved collections, and learned status in parallel
-        const [userCollections, userSavedCollections, learnedCollections] = await Promise.all([
+        // Load own collections, saved collections, and learned collections in parallel
+        const [userCollections, userSavedCollections, learnedCollectionsWithData, learnedCollections] = await Promise.all([
           loadUserCollections(currentUser.id),
           loadSavedCollections(currentUser.id),
+          getLearnedCollectionsWithData(currentUser.id),
           getLearnedCollections(currentUser.id)
         ]);
 
+        console.log('📊 Loaded collections:', {
+          own: userCollections.length,
+          saved: userSavedCollections.length,
+          learned: learnedCollectionsWithData.length,
+          learnedRecords: learnedCollections.length
+        });
+
         setOwnCollections(userCollections);
         setSavedCollections(userSavedCollections);
+        setLearnedCollections(learnedCollectionsWithData);
         
-        // Create set of learned collection IDs
+        // Create set of learned collection IDs from learned records (not full collections)
         const learnedIds = new Set(learnedCollections.map(learned => learned.collectionId));
         setLearnedCollectionIds(learnedIds);
+        
+        console.log('🎯 Learned collection IDs:', Array.from(learnedIds));
+        console.log('📚 Learned collections with data:', learnedCollectionsWithData.map(c => ({ id: c.id, name: c.name })));
       } catch (error) {
         console.error('Error loading collections:', error);
       } finally {
@@ -127,43 +140,43 @@ export const MyCollections: React.FC<MyCollectionsProps> = ({
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
       {/* Header */}
-      <div className="bg-white dark:bg-gray-800 shadow-sm border-b dark:border-gray-700">
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={onBack}
-                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-              >
-                <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-300" />
-              </button>
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg">
-                  <BookOpen className="w-6 h-6 text-white" />
-                </div>
-                <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Kolleksiyalarım</h1>
+      <div className="bg-white shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
+          {/* Top row with back button and title */}
+          <div className="flex items-center space-x-4 mb-4">
+            <button
+              onClick={onBack}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5 text-gray-600" />
+            </button>
+            <div className="flex items-center space-x-3">
+              <div className="p-2 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg">
+                <BookOpen className="w-6 h-6 text-white" />
               </div>
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-800">Kolleksiyalarım</h1>
             </div>
+          </div>
+          
+          {/* Action buttons - responsive layout */}
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+            <button
+              onClick={onNavigateToAllCollections}
+              className="flex items-center justify-center space-x-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white px-4 sm:px-6 py-3 rounded-lg font-semibold hover:from-green-600 hover:to-emerald-700 transition-all shadow-lg hover:shadow-xl text-sm sm:text-base"
+            >
+              <BookOpen className="w-4 h-4" />
+              <span>Bütün Kolleksiyalar</span>
+            </button>
             
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={onNavigateToAllCollections}
-                className="flex items-center space-x-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white px-6 py-3 rounded-lg font-semibold hover:from-green-600 hover:to-emerald-700 transition-all shadow-lg hover:shadow-xl"
-              >
-                <BookOpen className="w-4 h-4" />
-                <span>Bütün Kolleksiyalar</span>
-              </button>
-              
-              <button
-                onClick={() => setShowCreateForm(true)}
-                className="flex items-center space-x-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white px-6 py-3 rounded-lg font-semibold hover:from-blue-600 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Yeni Kolleksiya</span>
-              </button>
-            </div>
+            <button
+              onClick={() => setShowCreateForm(true)}
+              className="flex items-center justify-center space-x-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white px-4 sm:px-6 py-3 rounded-lg font-semibold hover:from-blue-600 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl text-sm sm:text-base"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Yeni Kolleksiya</span>
+            </button>
           </div>
         </div>
       </div>
@@ -175,7 +188,7 @@ export const MyCollections: React.FC<MyCollectionsProps> = ({
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
             <span className="ml-4 text-gray-600">Kolleksiyalar yüklənir...</span>
           </div>
-        ) : (ownCollections.length === 0 && savedCollections.length === 0) ? (
+        ) : (ownCollections.length === 0 && savedCollections.length === 0 && learnedCollections.length === 0) ? (
           <div className="text-center py-20">
             <div className="w-24 h-24 mx-auto bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center mb-6">
               <BookOpen className="w-12 h-12 text-gray-400" />
@@ -205,7 +218,7 @@ export const MyCollections: React.FC<MyCollectionsProps> = ({
                     <BookOpen className="w-6 h-6 text-blue-600" />
                   </div>
                   <div className="ml-4">
-                    <div className="text-2xl font-bold text-gray-800">{ownCollections.length + savedCollections.length}</div>
+                    <div className="text-2xl font-bold text-gray-800">{ownCollections.length + savedCollections.length + learnedCollections.length}</div>
                     <div className="text-gray-600">Cəmi Kolleksiya</div>
                   </div>
                 </div>
@@ -271,9 +284,15 @@ export const MyCollections: React.FC<MyCollectionsProps> = ({
               const savedUnlearned = uniqueSavedCollections.filter(c => !learnedCollectionIds.has(c.id));
               const savedLearned = uniqueSavedCollections.filter(c => learnedCollectionIds.has(c.id));
               
+              // Show ALL learned collections - don't filter out own collections!
+              const uniqueLearnedCollections = learnedCollections || [];
+              
               // Combine for sections with null checks
               const unlearned = [...(ownUnlearned || []), ...(savedUnlearned || [])];
-              const learned = [...(ownLearned || []), ...(savedLearned || [])];
+              
+              // For learned section: use ALL learned collections from embedded data 
+              // This includes both own learned collections and others' learned collections
+              const learned = uniqueLearnedCollections || [];
               
               return (
                 <>
@@ -464,17 +483,17 @@ export const MyCollections: React.FC<MyCollectionsProps> = ({
                     </div>
                   )}
 
-                  {/* Artıq Öyrəndiklərim */}
-                  {learned.length > 0 && (
+                  {/* Öyrənilən Kolleksiyalar (yalnız başqalarından öyrənilənlər) */}
+                  {uniqueLearnedCollections.length > 0 && (
                     <div className="mb-12">
                       <div className="flex items-center mb-6">
                         <div className="p-2 bg-green-100 rounded-lg">
                           <CheckCircle className="w-6 h-6 text-green-600" />
                         </div>
-                        <h2 className="text-2xl font-bold text-gray-800 ml-4">Artıq Öyrəndiklərim ({learned.length})</h2>
+                        <h2 className="text-2xl font-bold text-gray-800 ml-4">Öyrənilən Kolleksiyalar ({uniqueLearnedCollections.length})</h2>
                       </div>
                       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {learned.map((collection) => (
+                        {uniqueLearnedCollections.map((collection) => (
                           <div
                             key={collection.id}
                             className="bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden border-l-4 border-green-500 opacity-90"

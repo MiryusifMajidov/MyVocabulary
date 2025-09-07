@@ -26,11 +26,12 @@ service cloud.firestore {
     match /learned_collections/{document} {
       // Allow reading any learned collection for leaderboard stats
       allow read: if request.auth != null;
-      // Allow writing only own learned status
-      allow write: if request.auth != null
-        && request.auth.uid == resource.data.userId;
+      // Allow creating only own learned status
       allow create: if request.auth != null
         && request.auth.uid == request.resource.data.userId;
+      // Allow updating/deleting only own learned status
+      allow update, delete: if request.auth != null
+        && request.auth.uid == resource.data.userId;
     }
 
     // Saved collections - users can only manage their own saved collections
@@ -56,6 +57,24 @@ service cloud.firestore {
         && request.auth.uid == request.resource.data.userId;
       allow update, delete: if request.auth != null
         && request.auth.uid == resource.data.userId;
+    }
+
+    // Exam participations - users can read/write their own participations, and read all for stats
+    match /exam_participations/{document} {
+      // Allow reading all participations for exam stats and leaderboard
+      allow read: if request.auth != null;
+      // Allow creating/updating only own participations
+      allow write: if request.auth != null
+        && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null
+        && request.auth.uid == request.resource.data.userId;
+    }
+
+    // Exam stats - all authenticated users can read and update for global statistics
+    match /exam_stats/{document} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+      allow create: if request.auth != null;
     }
   }
 }

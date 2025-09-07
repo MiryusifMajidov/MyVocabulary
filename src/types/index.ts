@@ -1,7 +1,9 @@
 export interface Word {
-  id: string;
-  english: string;
+  id?: string;
+  word?: string;  // English word
+  english?: string; // Backwards compatibility
   meaning: string;
+  type?: string; // word type (noun, verb, etc.)
 }
 
 export interface WordCollection {
@@ -18,10 +20,13 @@ export interface WordCollection {
   tags?: string[];
 }
 
+export type QuizMode = 'english-to-meaning' | 'meaning-to-english' | 'mixed';
+
 export interface QuizQuestion {
   word: Word;
   options: string[];
   correctIndex: number;
+  mode: QuizMode; // Which direction this specific question is
 }
 
 export interface QuizResult {
@@ -31,7 +36,7 @@ export interface QuizResult {
 }
 export interface AppSettings {
   autoAdvance: boolean;
-  darkMode: boolean;
+  quizMode: QuizMode;
 }
 
 export interface User {
@@ -63,6 +68,14 @@ export interface PublicExam {
   totalAttempts: number;
   averageScore: number;
   rating: number;
+  // Embedded words make exam independent of original collections
+  embeddedWords?: Word[];
+  // Collection metadata for reference
+  collectionsMetadata?: {
+    id: string;
+    name: string;
+    wordCount: number;
+  }[];
 }
 
 export interface ExamResult {
@@ -81,6 +94,8 @@ export interface LearnedCollection {
   collectionId: string;
   learnedAt: Date;
   perfectScoreCount: number;
+  // Embedded collection data to preserve even if original is deleted
+  embeddedData?: WordCollection;
 }
 
 export interface SavedCollection {

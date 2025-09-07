@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { WordCollection, QuizQuestion, QuizResult } from '../types';
+import { WordCollection, QuizQuestion, QuizResult, QuizMode } from '../types';
 import { generateQuizQuestions } from '../utils/quiz';
 import { ArrowLeft, CheckCircle, XCircle, ArrowRight } from 'lucide-react';
 
 interface QuizProps {
   collection: WordCollection;
   autoAdvance: boolean;
+  quizMode: QuizMode;
   onBack: () => void;
   onFinish: (result: QuizResult) => void;
 }
@@ -13,6 +14,7 @@ interface QuizProps {
 export const Quiz: React.FC<QuizProps> = ({
   collection,
   autoAdvance,
+  quizMode,
   onBack,
   onFinish
 }) => {
@@ -24,8 +26,8 @@ export const Quiz: React.FC<QuizProps> = ({
   const [canAdvance, setCanAdvance] = useState(false);
 
   useEffect(() => {
-    setQuestions(generateQuizQuestions(collection.words));
-  }, [collection]);
+    setQuestions(generateQuizQuestions(collection.words, quizMode));
+  }, [collection, quizMode]);
 
   const currentQuestion = questions[currentQuestionIndex];
 
@@ -99,10 +101,18 @@ export const Quiz: React.FC<QuizProps> = ({
       <div className="bg-white rounded-xl shadow-lg p-8">
         <div className="text-center mb-8">
           <h2 className="text-2xl font-semibold text-gray-800 mb-2">
-            Bu sözün mənası nədir?
+            {currentQuestion.mode === 'english-to-meaning' 
+              ? 'Bu sözün mənası nədir?' 
+              : 'Bu mənanın ingilis dilindəki qarşılığı nədir?'
+            }
           </h2>
           <div className="bg-gradient-to-r from-blue-500 to-purple-600 text-white px-8 py-4 rounded-xl inline-block">
-            <span className="text-3xl font-bold">{currentQuestion.word.english}</span>
+            <span className="text-3xl font-bold">
+              {currentQuestion.mode === 'english-to-meaning' 
+                ? (currentQuestion.word.word || currentQuestion.word.english)
+                : currentQuestion.word.meaning
+              }
+            </span>
           </div>
         </div>
 

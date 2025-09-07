@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Settings as SettingsIcon, Zap, Hand, Moon, Sun, User, Key, Eye, EyeOff } from 'lucide-react';
+import { ArrowLeft, Settings as SettingsIcon, Zap, Hand, User, Key, Eye, EyeOff } from 'lucide-react';
 import { AppSettings } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -28,10 +28,6 @@ export const Settings: React.FC<SettingsProps> = ({
 
   const handleAutoAdvanceChange = (autoAdvance: boolean) => {
     onUpdateSettings({ ...settings, autoAdvance });
-  };
-
-  const handleDarkModeChange = (darkMode: boolean) => {
-    onUpdateSettings({ ...settings, darkMode });
   };
 
   const handleUsernameUpdate = async () => {
@@ -89,23 +85,23 @@ export const Settings: React.FC<SettingsProps> = ({
   };
 
   return (
-    <div className="max-w-2xl mx-auto p-6 dark:text-white">
+    <div className="max-w-2xl mx-auto p-6">
       <div className="flex items-center mb-6">
         <button
           onClick={onBack}
-          className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors duration-200 mr-4"
+          className="p-2 hover:bg-gray-100 rounded-lg transition-colors duration-200 mr-4"
         >
-          <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+          <ArrowLeft className="w-5 h-5 text-gray-600" />
         </button>
         <div className="flex items-center space-x-3">
           <div className="p-2 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg">
             <SettingsIcon className="w-6 h-6 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-gray-800 dark:text-white">Ayarlar</h1>
+          <h1 className="text-3xl font-bold text-gray-800">Tənzimləmələr</h1>
         </div>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8">
+      <div className="bg-white rounded-xl shadow-lg p-8">
         {error && (
           <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-4 text-sm">
             {error}
@@ -120,13 +116,13 @@ export const Settings: React.FC<SettingsProps> = ({
 
         {/* User Profile Section */}
         <div className="mb-8">
-          <h2 className="text-xl font-semibold text-gray-800 dark:text-white mb-6">İstifadəçi Profili</h2>
+          <h2 className="text-xl font-semibold text-gray-800 mb-6">İstifadəçi Profili</h2>
           
           <div className="space-y-6">
             {/* Username Update */}
-            <div className="border border-gray-200 dark:border-gray-600 rounded-xl p-6">
+            <div className="border border-gray-200 rounded-xl p-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-medium text-gray-800 dark:text-white">Username</h3>
+                <h3 className="font-medium text-gray-800">İstifadəçi adı</h3>
                 {!isProfileEditing && (
                   <button
                     onClick={() => setIsProfileEditing(true)}
@@ -144,7 +140,7 @@ export const Settings: React.FC<SettingsProps> = ({
                       type="text"
                       value={newUsername}
                       onChange={(e) => setNewUsername(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       placeholder="Yeni username"
                       disabled={loading}
                     />
@@ -175,15 +171,15 @@ export const Settings: React.FC<SettingsProps> = ({
                   <div className="p-2 bg-blue-100 rounded-lg">
                     <User className="w-5 h-5 text-blue-600" />
                   </div>
-                  <span className="text-gray-800 dark:text-white">{currentUser?.username}</span>
+                  <span className="text-gray-800">{currentUser?.username}</span>
                 </div>
               )}
             </div>
 
             {/* Password Update */}
-            <div className="border border-gray-200 dark:border-gray-600 rounded-xl p-6">
+            <div className="border border-gray-200 rounded-xl p-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-medium text-gray-800 dark:text-white">Parol</h3>
+                <h3 className="font-medium text-gray-800">Parol</h3>
                 {!isPasswordEditing && (
                   <button
                     onClick={() => setIsPasswordEditing(true)}
@@ -197,20 +193,20 @@ export const Settings: React.FC<SettingsProps> = ({
               {isPasswordEditing ? (
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Yeni Parol</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Yeni Parol</label>
                     <div className="relative">
                       <input
                         type={showPassword ? 'text' : 'password'}
                         value={newPassword}
                         onChange={(e) => setNewPassword(e.target.value)}
-                        className="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         placeholder="Yeni parol"
                         disabled={loading}
                       />
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-2.5 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+                        className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
                         disabled={loading}
                       >
                         {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -218,20 +214,20 @@ export const Settings: React.FC<SettingsProps> = ({
                     </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Parolu təkrarla</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Parolu təkrarla</label>
                     <div className="relative">
                       <input
                         type={showConfirmPassword ? 'text' : 'password'}
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
-                        className="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         placeholder="Parolu təkrarla"
                         disabled={loading}
                       />
                       <button
                         type="button"
                         onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                        className="absolute right-3 top-2.5 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+                        className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
                         disabled={loading}
                       >
                         {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -265,70 +261,19 @@ export const Settings: React.FC<SettingsProps> = ({
                   <div className="p-2 bg-purple-100 rounded-lg">
                     <Key className="w-5 h-5 text-purple-600" />
                   </div>
-                  <span className="text-gray-500 dark:text-gray-400">••••••••</span>
+                  <span className="text-gray-500">••••••••</span>
                 </div>
               )}
             </div>
           </div>
         </div>
 
-        {/* Theme Settings */}
-        <div className="mb-8">
-          <h2 className="text-xl font-semibold text-gray-800 dark:text-white mb-6">Görünüş Ayarları</h2>
-          
-          <div className="space-y-6">
-            <div className="border border-gray-200 dark:border-gray-600 rounded-xl p-6">
-              <h3 className="font-medium text-gray-800 mb-4">Tema</h3>
-              
-              <div className="space-y-4">
-                <label className="flex items-center space-x-4 cursor-pointer group">
-                  <input
-                    type="radio"
-                    name="theme"
-                    checked={!settings.darkMode}
-                    onChange={() => handleDarkModeChange(false)}
-                    className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
-                  />
-                  <div className="flex items-center space-x-3 flex-1">
-                    <div className="p-2 bg-yellow-100 rounded-lg group-hover:bg-yellow-200 transition-colors duration-200">
-                      <Sun className="w-5 h-5 text-yellow-600" />
-                    </div>
-                    <div>
-                      <div className="font-medium text-gray-800 dark:text-white">Açıq tema</div>
-                      <div className="text-sm text-gray-600 dark:text-gray-300">Gündüz rejimi</div>
-                    </div>
-                  </div>
-                </label>
-
-                <label className="flex items-center space-x-4 cursor-pointer group">
-                  <input
-                    type="radio"
-                    name="theme"
-                    checked={settings.darkMode}
-                    onChange={() => handleDarkModeChange(true)}
-                    className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
-                  />
-                  <div className="flex items-center space-x-3 flex-1">
-                    <div className="p-2 bg-gray-800 rounded-lg group-hover:bg-gray-700 transition-colors duration-200">
-                      <Moon className="w-5 h-5 text-gray-200" />
-                    </div>
-                    <div>
-                      <div className="font-medium text-gray-800 dark:text-white">Qaranlıq tema</div>
-                      <div className="text-sm text-gray-600 dark:text-gray-300">Gecə rejimi</div>
-                    </div>
-                  </div>
-                </label>
-              </div>
-            </div>
-          </div>
-        </div>
-
         {/* Quiz Settings */}
         <div className="mb-8">
-          <h2 className="text-xl font-semibold text-gray-800 dark:text-white mb-6">Quiz Ayarları</h2>
+          <h2 className="text-xl font-semibold text-gray-800 mb-6">Quiz Ayarları</h2>
           
           <div className="space-y-6">
-            <div className="border border-gray-200 dark:border-gray-600 rounded-xl p-6">
+            <div className="border border-gray-200 rounded-xl p-6">
               <h3 className="font-medium text-gray-800 mb-4">Sual Keçid Rejimi</h3>
               
               <div className="space-y-4">
@@ -345,8 +290,8 @@ export const Settings: React.FC<SettingsProps> = ({
                       <Zap className="w-5 h-5 text-blue-600" />
                     </div>
                     <div>
-                      <div className="font-medium text-gray-800 dark:text-white">Avtomatik keçid</div>
-                      <div className="text-sm text-gray-600 dark:text-gray-300">Cavab verdikdən sonra avtomatik növbəti suala keç</div>
+                      <div className="font-medium text-gray-800">Avtomatik keçid</div>
+                      <div className="text-sm text-gray-600">Cavab verdikdən sonra avtomatik növbəti suala keç</div>
                     </div>
                   </div>
                 </label>
@@ -364,8 +309,8 @@ export const Settings: React.FC<SettingsProps> = ({
                       <Hand className="w-5 h-5 text-purple-600" />
                     </div>
                     <div>
-                      <div className="font-medium text-gray-800 dark:text-white">Manual keçid</div>
-                      <div className="text-sm text-gray-600 dark:text-gray-300">"Növbəti" düyməsinə basaraq özünüz keçid edin</div>
+                      <div className="font-medium text-gray-800">Manual keçid</div>
+                      <div className="text-sm text-gray-600">"Növbəti" düyməsinə basaraq özünüz keçid edin</div>
                     </div>
                   </div>
                 </label>
@@ -374,8 +319,8 @@ export const Settings: React.FC<SettingsProps> = ({
           </div>
         </div>
 
-        <div className="border-t border-gray-200 dark:border-gray-600 pt-6">
-          <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
+        <div className="border-t border-gray-200 pt-6">
+          <p className="text-sm text-gray-500 text-center">
             Ayarlar avtomatik saxlanılır
           </p>
         </div>
