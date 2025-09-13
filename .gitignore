@@ -1,4 +1,4 @@
 # Only ignore sensitive/personal files for Netlify deployment
 .DS_Store
 *.log
-.env.local
+#.env.local
